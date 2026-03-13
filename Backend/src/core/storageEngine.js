@@ -7,7 +7,8 @@ const { encryptBuffer } = require('../pipeline/encryptStream');
 const { createUploadStream, ChunkSplitter } = require('../pipeline/chunker');
 const queue = require('./queueManager');
 const pool = require('./channelPool');
-const logger = require('../utils/logger'); // Your Pro Logger
+const logger = require('../utils/logger');
+const hasher = require('../utils/hasher');
 
 /**
  * Saves file metadata to the local JSON database.
@@ -34,6 +35,8 @@ const saveToRegistry = (fileData) => {
 exports.processUpload = async (client, filePath, originalName) => {
     const stats = fs.statSync(filePath);
     const totalSize = stats.size;
+    const fileHash = await hasher.calculateHash(filePath);
+
     const expectedChunks = Math.ceil(totalSize / chunkSize);
 
     logger.info(`Starting upload: ${originalName} (${(totalSize / 1024 / 1024).toFixed(2)} MB)`);
@@ -87,6 +90,7 @@ exports.processUpload = async (client, filePath, originalName) => {
     // Finalize by saving to registry
     const fileId = saveToRegistry({
         name: originalName,
+        hash: fileHash,
         chunks: chunksMetadata,
         size: totalSize,
         compressed: true,

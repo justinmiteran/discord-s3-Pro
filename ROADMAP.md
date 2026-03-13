@@ -1,37 +1,36 @@
-# Discord S3 Pro - Roadmap d'Évolution
+# Discord S3 Pro - Evolution Roadmap
 
-Ce document sert de contexte opérationnel pour l'IA. Il retrace l'état actuel du système et les modules d'amélioration à implémenter.
+This document serves as the operational context. It tracks the current state and planned improvements.
 
-## État Actuel du Système
-- [cite_start]**Core**: Node.js avec `discord.js` et `express`.
-- **Pipeline**: Chiffrement AES-256-GCM, compression GZIP et découpage en chunks.
-- **Stockage**: Distribution sur plusieurs salons Discord (Channel Pool).
-- **Registre actuel**: Fichier local `registry.json` (À migrer).
+## Current State
 
----
-
-## Étapes d'Amélioration
-
-### Étape 1 : Fondations, Sécurité & Migration DB 
-- [ ] **Migration Database** : Remplacer `registry.json` par SQLite ou MongoDB pour une gestion robuste des métadonnées.
-- [ ] **Sécurisation des Secrets** : Déplacer le `DISCORD_TOKEN` et l'`ENCRYPTION_KEY` vers des variables d'environnement système.
-- [ ] **Clés Dérivées (KDF)** : Implémenter une clé de chiffrement unique par fichier au lieu d'une clé globale.
-
-### Étape 2 : Performance du Pipeline
-- [ ] **Parallélisation** : Envoyer plusieurs chunks simultanément dans le `storageEngine`.
-- [ ] **Streaming Upload** : Support du `multipart/form-data` dans `routes.js` pour éviter de dépendre d'un chemin local `filePath`.
-- [ ] **Optimisation Queue** : Passage à un algorithme "Token Bucket" pour le `queueManager`.
-
-### Étape 3 : Résilience & Intégrité
-- [ ] **Hashing Intégral** : Calculer et stocker le SHA-256 du fichier original pour vérification post-téléchargement.
-- [ ] **Backup des Métadonnées** : Réplication automatique de la base de données sur un salon Discord dédié.
-- [ ] **Auto-Retry** : Gestion des tentatives automatiques en cas d'échec d'upload d'un chunk.
-
-### Étape 4 : Interface & Monitoring
-- [ ] **WebSockets** : Suivi de la progression en temps réel pour le client.
-- [ ] **Audit de Nettoyage** : Synchronisation stricte entre la DB et les messages Discord lors des suppressions.
+* **Core**: Node.js with `discord.js` and `express`.
+* **Pipeline**: AES-256-GCM encryption, GZIP compression, and chunking.
+* **Storage**: Distributed across multiple Discord channels (Channel Pool).
+* **Current Registry**: Local `registry.json` file.
 
 ---
 
-## Instructions pour l'IA
-Lorsqu'un module est demandé, se référer aux fichiers `src/core/`, `src/pipeline/` et `src/api/` fournis précédemment. Toujours mettre à jour ce fichier après une modification majeure de l'architecture.
+## Improvement Steps
+
+### Step 1: Foundations & Security
+
+* [ ] **Database Migration**: Replace `registry.json` with a robust database system (Choice pending user validation).
+* [ ] **Secret Hardening**: Move `DISCORD_TOKEN` and `ENCRYPTION_KEY` to system environment variables.
+* [ ] **Key Derivation (KDF)**: Implement a unique encryption key per file.
+
+### Step 2: Pipeline Performance
+
+* [ ] **Parallelization**: Upload multiple chunks simultaneously.
+* [ ] **Streaming Upload**: Support `multipart/form-data` to remove local `filePath` dependency.
+* [ ] **Queue Optimization**: Implement a "Token Bucket" algorithm for the `queueManager`.
+
+### Step 3: Resilience & Integrity
+
+* [x] **Full Hashing**: Calculate/store SHA-256 of original files.
+* [ ] **Metadata Backup**: Automate database replication to a dedicated Discord channel.
+* [ ] **Auto-Retry**: Handle failed chunk uploads automatically.
+
+---
+
+**Pour la suite, quel système de base de données souhaites-tu implémenter pour remplacer le fichier JSON ?** (Exemples : SQLite, MongoDB, PostgreSQL, ou autre).

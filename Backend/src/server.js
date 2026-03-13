@@ -1,5 +1,6 @@
 const fs = require('fs');
 const zlib = require('zlib');
+const crypto = require('crypto');
 
 const express = require('express');
 const axios = require('axios');
@@ -51,6 +52,22 @@ module.exports = (client) => {
 
             // Initialize decompression stream
             const gunzip = zlib.createGunzip();
+            const hashVerify = crypto.createHash('sha256');
+
+            gunzip.on('data', (chunk) => {
+                hashVerify.update(chunk);
+            });
+
+            gunzip.on('end', () => {
+                const finalHash = hashVerify.digest('hex');
+
+                if (finalHash === file.hash) {
+                    logger.success(`Integrity verified for ${file.name} (SHA-256 matched)`);
+                } else {
+                    logger.error(`INTEGRITY FAILURE: ${file.name} is corrupted!`);
+                }
+            });
+
             gunzip.pipe(res);
 
             // Fetch and process chunks sequentially

@@ -38,6 +38,7 @@ Backend/
 - **Queue Management**: Regulates request frequency to comply with Discord Global Rate Limits and prevent account suspension.
 - **Channel Pooling**: Distributes data chunks across multiple channels to optimize availability and circumvent per-channel rate limits.
 - **Security**: Ensures data privacy through client-side encryption before transmission.
+- **Data Integrity**: Uses SHA-256 hashing to verify file consistency during both upload and download cycles.
 
 ## API Endpoints
 

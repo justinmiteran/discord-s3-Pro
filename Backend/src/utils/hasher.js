@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 
 const logger = require('./logger');
+const { Transform } = require('stream');
 
 /**
  * Generates a SHA-256 checksum for a file to ensure data integrity.
@@ -34,3 +35,28 @@ exports.calculateHash = (path) =>
             resolve(fileHash);
         });
     });
+
+/**
+ * Creates a Transform stream that calculates SHA-256 on the fly.
+ * It verifies the result against the storedHash when the stream finishes.
+ */
+exports.createVerificationStream = (storedHash, fileName) => {
+    const hash = crypto.createHash('sha256');
+
+    return new Transform({
+        transform(chunk, encoding, callback) {
+            hash.update(chunk);
+            callback(null, chunk);
+        },
+        flush(callback) {
+            const finalHash = hash.digest('hex');
+            if (finalHash === storedHash) {
+                logger.success(`Integrity verified for ${fileName}`);
+            } else {
+                logger.error(`CORRUPTION DETECTED: ${fileName}`);
+                logger.error(`Expected: ${storedHash} | Got: ${finalHash}`);
+            }
+            callback();
+        },
+    });
+};

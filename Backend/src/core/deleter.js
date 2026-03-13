@@ -1,17 +1,14 @@
-const fs = require('fs');
-
 const queue = require('./queueManager');
-const { dbPath } = require('../config');
 const logger = require('../utils/logger');
+const { getRepository } = require('./database');
 
 /**
  * Service to handle complete file deletion from Discord and Registry.
  */
 exports.deleteFile = async (client, fileId) => {
-    if (!fs.existsSync(dbPath)) throw new Error('REGISTRY_NOT_FOUND');
+    const repo = getRepository();
 
-    const registry = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
-    const file = registry[fileId];
+    const file = await repo.getFile(fileId);
 
     if (!file) throw new Error('FILE_NOT_FOUND');
 
@@ -33,8 +30,11 @@ exports.deleteFile = async (client, fileId) => {
     }
 
     // Registry Cleanup
-    delete registry[fileId];
-    fs.writeFileSync(dbPath, JSON.stringify(registry, null, 4));
+    if (repo.deleteFile) {
+        await repo.deleteFile(fileId);
+    } else {
+        logger.error(`Repository ${repo.name} does not implement deleteFile!`);
+    }
 
     return file.name;
 };

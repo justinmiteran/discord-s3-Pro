@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: ./Backend
+    container_name: discord-s3-app
+    restart: always
+    env_file: .env
+    volumes:
+      - ./Backend/config.cfg:/usr/src/app/config.cfg
+    depends_on:
+      - db
+
+  db:
+    image: mongo:latest
+    container_name: discord-s3-db
+    restart: always
+    ports:
+      - "27017:27017" 
+    volumes:
+      - mongo_data:/data/db
+
+  visualizer:
+    image: mongo-express:latest
+    container_name: discord-s3-ui
+    restart: always
+    ports:
+      - "8081:8081"
+    environment:
+      - ME_CONFIG_MONGODB_SERVER=db
+      - ME_CONFIG_MONGODB_PORT=27017
+      - ME_CONFIG_BASICAUTH_USERNAME=admin
+      - ME_CONFIG_BASICAUTH_PASSWORD=pass
+    depends_on:
+      - db
+
+volumes:
+  mongo_data:

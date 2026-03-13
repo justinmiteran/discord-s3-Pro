@@ -1,32 +1,31 @@
 const fs = require('fs');
 const crypto = require('crypto');
-const path = require('path');
+const zlib = require('zlib');
 
-const { dbPath, chunkSize } = require('../config');
+const axios = require('axios');
+
+const { chunkSize } = require('../config');
 const { encryptBuffer } = require('../pipeline/encryptStream');
 const { createUploadStream, ChunkSplitter } = require('../pipeline/chunker');
 const queue = require('./queueManager');
 const pool = require('./channelPool');
 const logger = require('../utils/logger');
 const hasher = require('../utils/hasher');
+const { getRepository } = require('./database');
+const { decryptBuffer } = require('../pipeline/encryptStream');
 
 /**
  * Saves file metadata to the local JSON database.
  */
-const saveToRegistry = (fileData) => {
-    try {
-        const registry = fs.existsSync(dbPath) ? JSON.parse(fs.readFileSync(dbPath, 'utf8')) : {};
-        const fileId = crypto.randomBytes(3).toString('hex');
+const saveToRegistry = async (fileData) => {
+    const repo = getRepository(); // Get the generic interface
+    const fileId = crypto.randomBytes(4).toString('hex');
 
-        registry[fileId] = fileData;
-        fs.writeFileSync(dbPath, JSON.stringify(registry, null, 4));
+    // Generic method call
+    await repo.saveFile(fileId, fileData);
 
-        logger.success(`Metadata indexed. File ID: ${fileId} | Registry: ${path.basename(dbPath)}`);
-        return fileId;
-    } catch (err) {
-        logger.error(`Failed to update registry: ${err.message}`);
-        throw err;
-    }
+    logger.success(`Metadata indexed via Repository. ID: ${fileId}`);
+    return fileId;
 };
 
 /**
@@ -98,4 +97,39 @@ exports.processUpload = async (client, filePath, originalName) => {
     });
 
     return fileId;
+};
+
+exports.downloadFile = async (client, fileId, res) => {
+    const repo = getRepository();
+    const file = await repo.getFile(fileId);
+
+    if (!file) throw new Error('FILE_NOT_FOUND');
+
+    logger.info(`Streaming started: ${file.name} (${file.chunks.length} chunks)`);
+
+    // Set headers on the response object
+    res.setHeader('Content-Disposition', `attachment; filename="${file.name}"`);
+    res.setHeader('Content-Type', 'application/octet-stream');
+
+    const gunzip = zlib.createGunzip();
+    const integritySpy = hasher.createVerificationStream(file.hash, file.name);
+
+    gunzip.pipe(integritySpy).pipe(res);
+
+    for (let i = 0; i < file.chunks.length; i++) {
+        const chunk = file.chunks[i];
+
+        const msg = await queue.add(async () => {
+            const channel = await client.channels.fetch(chunk.cId);
+            return await channel.messages.fetch(chunk.mId);
+        });
+
+        const url = msg.attachments.first().url;
+        const response = await axios.get(url, { responseType: 'arraybuffer' });
+
+        const decrypted = decryptBuffer(Buffer.from(response.data));
+        gunzip.write(decrypted);
+    }
+
+    gunzip.end();
 };

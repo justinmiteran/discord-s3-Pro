@@ -6,8 +6,8 @@ const router = express.Router();
 
 const storage = require('../core/storageEngine');
 const deleter = require('../core/deleter');
-const { dbPath } = require('../config');
 const logger = require('../utils/logger');
+const { getRepository } = require('../core/database');
 
 module.exports = (client) => {
     // --- ROUTES ---
@@ -16,17 +16,13 @@ module.exports = (client) => {
         res.json({ status: 'online', bot: client.user?.tag || 'Prêt' });
     });
 
-    router.get('/list', (req, res) => {
+    router.get('/list', async (req, res) => {
         try {
-            if (fs.existsSync(dbPath)) {
-                const data = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
-                res.json(data);
-            } else {
-                res.json({});
-            }
+            const repo = getRepository();
+            const files = await repo.listFiles();
+            res.json(files);
         } catch (err) {
-            logger.error(`Failed to read registry: ${err.message}`);
-            res.status(500).json({ success: false, error: 'Database read error' });
+            res.status(500).json({ error: err.message });
         }
     });
 
@@ -49,6 +45,18 @@ module.exports = (client) => {
         } catch (err) {
             logger.error(`Upload pipeline failed: ${err.stack}`);
             res.status(500).json({ success: false, error: err.message });
+        }
+    });
+
+    router.get('/download/:id', async (req, res) => {
+        try {
+            await storage.downloadFile(client, req.params.id, res);
+        } catch (err) {
+            logger.error(`Download Error: ${err.message}`);
+            if (!res.headersSent) {
+                const status = err.message === 'FILE_NOT_FOUND' ? 404 : 500;
+                res.status(status).send(err.message);
+            }
         }
     });
 

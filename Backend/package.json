@@ -1,0 +1,26 @@
+{
+    "name": "discord-s3-pro",
+    "version": "1.0.0",
+    "description": "Système de stockage distribué et chiffré sur Discord",
+    "main": "index.js",
+    "scripts": {
+        "start": "node index.js",
+        "dev": "nodemon index.js",
+        "lint": "eslint .",
+        "lint:fix": "eslint . --fix",
+        "format": "prettier . --write"
+    },
+    "dependencies": {
+        "axios": "^1.13.6",
+        "discord.js": "^14.25.1",
+        "dotenv": "^17.3.1",
+        "express": "^5.2.1"
+    },
+    "devDependencies": {
+        "eslint": "^9.39.3",
+        "eslint-config-prettier": "^10.1.8",
+        "eslint-plugin-import": "^2.32.0",
+        "nodemon": "^3.1.14",
+        "prettier": "^3.8.1"
+    }
+}

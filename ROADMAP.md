@@ -15,7 +15,7 @@ This document serves as the operational context. It tracks the current state and
 
 ### Step 1: Foundations & Security
 
-* [ ] **Database Migration**: Replace `registry.json` with a robust database system (Choice pending user validation).
+* [x] **Database Migration**: Replace `registry.json` with a robust database system (Choice pending user validation).
 * [ ] **Key Derivation (KDF)**: Implement a unique encryption key per file.
 
 ### Step 2: Pipeline Performance

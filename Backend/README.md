@@ -50,7 +50,3 @@ Backend/
 - `GET /download/:id`: Reconstructs files from distributed Discord segments.
 - `DELETE /file/:id`: Removes remote Discord messages and updates the active repository.
 - `GET /list`: Retrieves metadata for all stored objects from the configured database.
-
-```
-
-```

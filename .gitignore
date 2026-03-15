@@ -1,18 +1,29 @@
-# Dependencies
+# --- Dependencies ---
 node_modules/
-
-# Secrets
-.env
-
-# Local Data
-data/
-*.json
-!package.json
-
-# Logs
-*.log
+package-lock.json
 npm-debug.log*
 
-# Editor
+# --- TypeScript / Build ---
+dist/
+*.tsbuildinfo
+
+# --- Environment & Secrets ---
+.env
+.env.local
+.env.*.local
+
+# --- Application Data & Config ---
+config.cfg
+data/
+*.dat
+temp/
+
+# --- OS Specific ---
+.DS_Store
+Thumbs.db
+
+# --- IDEs ---
 .vscode/
 .idea/
+*.swp
+*.swo

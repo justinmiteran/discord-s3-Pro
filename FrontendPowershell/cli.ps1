@@ -81,25 +81,26 @@ switch ($Action) {
         }
     }
 
-    "list" {
+   "list" {
         try {
-            $List = Invoke-RestMethod -Uri "$ApiUrl/list" -Method Get
+            $Files = Invoke-RestMethod -Uri "$ApiUrl/list" -Method Get
             
-            if ($null -eq $List -or ($List.PSObject.Properties.Count -eq 0)) {
+            if ($null -eq $Files -or $Files.Count -eq 0) {
                 Write-Host "[!] Le registre est vide." -ForegroundColor Yellow
                 return
             }
 
             Write-Host "`n--- FICHIERS DISPONIBLES ---" -ForegroundColor Cyan
-            $Data = foreach ($property in $List.PSObject.Properties) {
+            
+            @($Files) | ForEach-Object {
                 [PSCustomObject]@{
-                    ID     = $property.Name
-                    Nom    = $property.Value.name
-                    Taille = "$([Math]::Round($property.Value.size / 1MB, 2)) MB"
-                    Date   = $property.Value.uploadedAt
+                    ID     = $_.id
+                    Nom    = $_.name
+                    Taille = "{0:N2} MB" -f ($_.size / 1MB)
+                    Date   = [DateTime]::Parse($_.date).ToString("dd/MM/yyyy HH:mm")
                 }
-            }
-            $Data | Format-Table -AutoSize
+            } | Format-Table -AutoSize
+
         } catch {
             Write-Host "[X] Erreur : Impossible de récupérer la liste." -ForegroundColor Red
         }

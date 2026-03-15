@@ -1,14 +1,14 @@
-const express = require('express');
+import express, { Express, Request, Response, NextFunction } from 'express';
+import { Client } from 'discord.js';
+import logger from './utils/logger.js';
+import createRoutes from './api/routes.js';
 
-const logger = require('./utils/logger');
-
-module.exports = (client) => {
+export default (client: Client): Express => {
     const app = express();
 
     // --- REQUEST TRACER MIDDLEWARE ---
-    app.use((req, res, next) => {
+    app.use((req: Request, res: Response, next: NextFunction) => {
         const start = Date.now();
-
         logger.info(`Incoming request: ${req.method} ${req.originalUrl}`);
 
         res.on('finish', () => {
@@ -19,8 +19,7 @@ module.exports = (client) => {
     });
 
     // --- API ROUTES BINDING ---
-    const apiRoutes = require('./api/routes')(client);
-    app.use('/', apiRoutes);
+    app.use('/', createRoutes(client));
 
     return app;
 };

@@ -1,25 +1,21 @@
-import express, { Express, Request, Response, NextFunction } from 'express';
+import express, { Express } from 'express';
 import { Client } from 'discord.js';
-import logger from './utils/logger.js';
-import createRoutes from './api/routes.js';
+import { requestLogger } from './api/middlewares/requestLogger.js';
+import { errorHandler, notFoundHandler } from './api/middlewares/errorHandler.js';
+import { createRoutes } from './api/routes/index.js';
 
-export default (client: Client): Express => {
+/**
+ * Creates and configures the Express server
+ * @param client - Discord bot client instance
+ * @returns Configured Express application
+ */
+export const createServer = (client: Client): Express => {
     const app = express();
 
-    // --- REQUEST TRACER MIDDLEWARE ---
-    app.use((req: Request, res: Response, next: NextFunction) => {
-        const start = Date.now();
-        logger.info(`Incoming request: ${req.method} ${req.originalUrl}`);
-
-        res.on('finish', () => {
-            const duration = Date.now() - start;
-            logger.http(req.method, req.originalUrl, res.statusCode, duration);
-        });
-        next();
-    });
-
-    // --- API ROUTES BINDING ---
+    app.use(requestLogger);
     app.use('/', createRoutes(client));
+    app.use(notFoundHandler);
+    app.use(errorHandler);
 
     return app;
 };

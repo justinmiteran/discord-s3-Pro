@@ -3,10 +3,13 @@ import { Transform, TransformCallback } from 'stream';
 import zlib from 'zlib';
 import logger from '../utils/logger.js';
 
+/**
+ * Stream transformer that splits data into fixed-size chunks
+ */
 export class ChunkSplitter extends Transform {
     private chunkSize: number;
     private buffer: Buffer;
-    public processedChunks: number; // Changed to public to allow external access
+    public processedChunks: number;
 
     constructor(chunkSize: number) {
         super();
@@ -29,15 +32,18 @@ export class ChunkSplitter extends Transform {
                 this.buffer = this.buffer.subarray(this.chunkSize);
 
                 this.processedChunks++;
-                // New informative log per chunk created
-                logger.info(
-                    `Chunker: Created segment #${this.processedChunks} (${(part.length / 1024 / 1024).toFixed(2)} MB)`,
-                );
+                
+                logger.debug('Chunk created', {
+                    chunkIndex: this.processedChunks,
+                    chunkSize: part.length,
+                    chunkSizeFormatted: `${(part.length / 1024 / 1024).toFixed(2)} MB`
+                });
 
                 this.push(part);
             }
             callback();
         } catch (err: any) {
+            logger.error('Chunk splitting failed', err);
             callback(err);
         }
     }
@@ -45,28 +51,34 @@ export class ChunkSplitter extends Transform {
     _flush(callback: TransformCallback): void {
         if (this.buffer.length > 0) {
             this.processedChunks++;
-            logger.info(
-                `Chunker: Created final segment #${this.processedChunks} (${(this.buffer.length / 1024 / 1024).toFixed(2)} MB)`,
-            );
+            
+            logger.debug('Final chunk created', {
+                chunkIndex: this.processedChunks,
+                chunkSize: this.buffer.length,
+                chunkSizeFormatted: `${(this.buffer.length / 1024 / 1024).toFixed(2)} MB`
+            });
+            
             this.push(this.buffer);
         }
-        logger.success(
-            `Chunker: Stream splitting complete. Total segments: ${this.processedChunks}`,
-        );
+        
+        logger.success('Stream splitting complete', {
+            totalChunks: this.processedChunks
+        });
+        
         callback();
     }
 }
 
 /**
- * Type-safe creation of the upload stream.
- * Returns a generic Node.js Readable to allow piping through the transformation layers.
+ * Creates a compressed file read stream
+ * @param filePath - Path to the file to read
+ * @returns Readable stream with gzip compression
  */
 export const createUploadStream = (filePath: string): NodeJS.ReadableStream => {
-    logger.info(`Initializing compression pipeline: ${filePath}`);
     const fileStream = fs.createReadStream(filePath);
 
     fileStream.on('error', (err: Error) => {
-        logger.error(`ReadStream Error: ${err.message}`);
+        logger.error('ReadStream error', err, { filePath });
     });
 
     return fileStream.pipe(zlib.createGzip({ level: zlib.constants.Z_BEST_COMPRESSION }));

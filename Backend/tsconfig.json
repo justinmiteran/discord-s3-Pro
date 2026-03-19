@@ -14,8 +14,12 @@
         "esModuleInterop": true,
         "skipLibCheck": true,
         "forceConsistentCasingInFileNames": true,
-        "resolveJsonModule": true
+        "resolveJsonModule": true,
+        "baseUrl": ".",
+        "paths": {
+            "@/*": ["src/*"]
+        }
     },
-    "include": ["**/*.ts", "src/**/*.ts"],
+    "include": ["src/**/*.ts"],
     "exclude": ["node_modules", "dist"]
 }

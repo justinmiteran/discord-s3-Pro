@@ -1,26 +1,59 @@
 import logger from '../utils/logger.js';
-import { dbType } from '../config.js';
-import { IRepository } from '../types/index.js';
+import { database } from '../config/index.js';
+import { IRepository } from '../types/interfaces/repository.interface.js';
 
 let repository: IRepository | null = null;
 
+/**
+ * Initializes the database repository based on configuration
+ * Dynamically loads the appropriate repository implementation (MongoDB or JSON)
+ * @throws Error if repository fails to load or connect
+ */
 export const initDatabase = async (): Promise<void> => {
+    const startTime = Date.now();
+    
     try {
-        // Dynamic loading of the repository based on type
-        const module = await import(`../repositories/${dbType}Repository.js`);
+        logger.info('Initializing database', {
+            provider: database.type
+        });
+        
+        const module = await import(`../repositories/${database.type}Repository.js`);
         repository = module.default || module;
 
-        if (!repository) throw new Error('Repository module exports nothing.');
+        if (!repository) {
+            logger.fatal('Repository module failed to load', undefined, {
+                provider: database.type
+            });
+            throw new Error('Repository module exports nothing.');
+        }
 
         await repository.connect();
-        logger.success(`Database initialized with provider: ${dbType}`);
+        
+        const duration = Date.now() - startTime;
+        logger.success('Database initialized', {
+            provider: database.type,
+            connectionTime: duration
+        });
     } catch (err: any) {
-        logger.error(`Critical: Failed to load database provider [${dbType}]: ${err.message}`);
+        logger.fatal('Database initialization failed', err, {
+            provider: database.type,
+            error: err.message
+        });
         process.exit(1);
     }
 };
 
+/**
+ * Returns the initialized repository instance
+ * @returns The active repository instance
+ * @throws Error if repository is not initialized
+ */
 export const getRepository = (): IRepository => {
-    if (!repository) throw new Error('Database repository not initialized');
+    if (!repository) {
+        logger.error('Repository not initialized', undefined, {
+            action: 'getRepository'
+        });
+        throw new Error('Database repository not initialized');
+    }
     return repository;
 };

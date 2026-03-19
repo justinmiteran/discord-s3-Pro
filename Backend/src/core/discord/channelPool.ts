@@ -1,5 +1,9 @@
-import { channels } from '../config.js';
+import { channels } from '../../config/index.js';
+import { ERROR_CODES } from '../../constants/index.js';
 
+/**
+ * Manages round-robin distribution of Discord channels for load balancing
+ */
 class ChannelPool {
     private channels: string[];
     private currentIndex: number;
@@ -10,11 +14,13 @@ class ChannelPool {
     }
 
     /**
-     * Round-robin selection of the next available Discord channel ID.
+     * Returns the next available Discord channel ID using round-robin selection
+     * @returns Discord channel ID
+     * @throws Error if no channels are configured
      */
     public next(): string {
         if (this.channels.length === 0) {
-            throw new Error('No Discord channels configured in config.cfg');
+            throw new Error(ERROR_CODES.NO_CHANNELS);
         }
         const id = this.channels[this.currentIndex];
         this.currentIndex = (this.currentIndex + 1) % this.channels.length;

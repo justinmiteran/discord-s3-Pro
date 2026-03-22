@@ -8,6 +8,9 @@ on:
   schedule:
     - cron: '0 0 * * 1'  # Tous les lundis à minuit
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   codeql:
     name: CodeQL Analysis

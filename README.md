@@ -2,6 +2,9 @@
 
 ![Tests](https://github.com/justinmiteran/storageBot/workflows/Tests/badge.svg)
 ![Lint](https://github.com/justinmiteran/storageBot/workflows/Lint/badge.svg)
+![Coverage](https://github.com/justinmiteran/storageBot/workflows/Coverage/badge.svg)
+![Docker](https://github.com/justinmiteran/storageBot/workflows/Docker/badge.svg)
+![Security](https://github.com/justinmiteran/storageBot/workflows/Security/badge.svg)
 
 A professional-grade, decentralized cloud storage solution that leverages Discord's infrastructure as a storage backend. Built with security, scalability, and maintainability in mind.
 

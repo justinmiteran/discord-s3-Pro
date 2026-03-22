@@ -13,7 +13,7 @@ const mockDb = {
     collection: vi.fn(() => mockCollection),
 } as unknown as Db;
 
-vi.mock('../../utils/logger.js', () => ({
+vi.mock('../../../utils/logger.js', () => ({
     default: {
         debug: vi.fn(),
         info: vi.fn(),
@@ -35,7 +35,7 @@ import {
     findRefreshToken,
     deleteRefreshToken,
     createIndexes,
-} from '../../repositories/userRepository.js';
+} from '../../../repositories/userRepository.js';
 
 describe('userRepository', () => {
     beforeEach(() => {

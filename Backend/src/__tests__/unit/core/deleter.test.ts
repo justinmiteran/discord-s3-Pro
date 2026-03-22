@@ -1,7 +1,7 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { Client, TextChannel, Message, Collection } from 'discord.js';
 
-vi.mock('../../config/index.js', () => ({
+vi.mock('../../../config/index.js', () => ({
     security: { jwtSecret: 'test-secret-key-32-characters!!', encryptionKey: Buffer.alloc(32) },
     database: { type: 'mongodb', mongoUri: null, jsonPath: '' },
     server: { port: 3000, chunkSize: 8388608 },
@@ -10,7 +10,7 @@ vi.mock('../../config/index.js', () => ({
     channels: ['ch1', 'ch2'],
 }));
 
-vi.mock('../../utils/logger.js', () => ({
+vi.mock('../../../utils/logger.js', () => ({
     default: {
         debug: vi.fn(),
         info: vi.fn(),
@@ -23,19 +23,19 @@ vi.mock('../../utils/logger.js', () => ({
 }));
 
 const mockGetRepository = vi.fn();
-vi.mock('../../core/database.js', () => ({
+vi.mock('../../../core/database.js', () => ({
     getRepository: () => mockGetRepository(),
 }));
 
 const mockQueueAdd = vi.fn();
-vi.mock('../../core/queueManager.js', () => ({
+vi.mock('../../../core/queueManager.js', () => ({
     default: { add: (fn: any) => mockQueueAdd(fn) },
 }));
 
-import { deleteFile } from '../../core/storage/deleter.js';
-import { NotFoundError } from '../../utils/errors/AppError.js';
-import { DISCORD_ERROR_CODES } from '../../constants/index.js';
-import logger from '../../utils/logger.js';
+import { deleteFile } from '../../../core/storage/deleter.js';
+import { NotFoundError } from '../../../utils/errors/AppError.js';
+import { DISCORD_ERROR_CODES } from '../../../constants/index.js';
+import logger from '../../../utils/logger.js';
 
 describe('deleter', () => {
     let mockClient: Partial<Client>;

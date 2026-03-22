@@ -4,7 +4,7 @@ import { Db, MongoClient } from 'mongodb';
 let mockDb: any;
 let mockClient: any;
 
-vi.mock('../../config/index.js', () => ({
+vi.mock('../../../config/index.js', () => ({
     database: {
         type: 'mongodb',
         mongoUri: 'mongodb://localhost:27017/test',
@@ -16,7 +16,7 @@ vi.mock('../../config/index.js', () => ({
     auth: { mongoUri: 'mongodb://localhost:27017/test' },
 }));
 
-vi.mock('../../utils/logger.js', () => ({
+vi.mock('../../../utils/logger.js', () => ({
     default: {
         debug: vi.fn(),
         info: vi.fn(),
@@ -38,9 +38,9 @@ vi.mock('mongodb', async () => {
     };
 });
 
-import mongodbRepository, { getDb } from '../../repositories/mongodbRepository.js';
-import { FileData } from '../../types/models/file.model.js';
-import logger from '../../utils/logger.js';
+import mongodbRepository, { getDb } from '../../../repositories/mongodbRepository.js';
+import { FileData } from '../../../types/models/file.model.js';
+import logger from '../../../utils/logger.js';
 
 describe('mongodbRepository', () => {
     let mockCollection: any;

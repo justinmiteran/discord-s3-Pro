@@ -1,13 +1,13 @@
 import { vi } from 'vitest';
-import { mockConfig, mockLogger } from '../helpers/standardMocks.js';
+import { mockConfig, mockLogger } from '../../../helpers/standardMocks.js';
 
-vi.mock('../../config/index.js', () => mockConfig);
-vi.mock('../../utils/logger.js', () => mockLogger);
+vi.mock('../../../../config/index.js', () => mockConfig);
+vi.mock('../../../../utils/logger.js', () => mockLogger);
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import jwt from 'jsonwebtoken';
-import { authMiddleware } from '../../api/middlewares/authMiddleware.js';
-import { AuthError } from '../../utils/errors/AppError.js';
+import { authMiddleware } from '../../../../api/middlewares/authMiddleware.js';
+import { AuthError } from '../../../../utils/errors/AppError.js';
 import type { Request, Response, NextFunction } from 'express';
 
 const SECRET = 'test-secret-key-32-characters!!';

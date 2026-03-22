@@ -1,7 +1,7 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import fs from 'fs';
 
-vi.mock('../../config/index.js', () => ({
+vi.mock('../../../config/index.js', () => ({
     security: { jwtSecret: 'test-secret-key-32-characters!!', encryptionKey: Buffer.alloc(32) },
     database: { type: 'json', mongoUri: null, jsonPath: './data/test-registry.json' },
     server: { port: 3000, chunkSize: 8388608 },
@@ -10,7 +10,7 @@ vi.mock('../../config/index.js', () => ({
     channels: ['123', '456'],
 }));
 
-vi.mock('../../utils/logger.js', () => ({
+vi.mock('../../../utils/logger.js', () => ({
     default: {
         debug: vi.fn(),
         info: vi.fn(),
@@ -39,7 +39,7 @@ describe('jsonRepository', () => {
         vi.resetModules();
         vi.mocked(fs.writeFileSync).mockImplementation(() => {});
 
-        const module = await import('../../repositories/jsonRepository.js');
+        const module = await import('../../../repositories/jsonRepository.js');
         repository = module.default;
     });
 

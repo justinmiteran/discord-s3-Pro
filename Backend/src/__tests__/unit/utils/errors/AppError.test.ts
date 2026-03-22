@@ -1,8 +1,8 @@
 import { vi } from 'vitest';
-import { mockConfig, mockLogger } from '../helpers/standardMocks.js';
+import { mockConfig, mockLogger } from '../../../helpers/standardMocks.js';
 
-vi.mock('../../config/index.js', () => mockConfig);
-vi.mock('../../utils/logger.js', () => mockLogger);
+vi.mock('../../../../config/index.js', () => mockConfig);
+vi.mock('../../../../utils/logger.js', () => mockLogger);
 
 import { describe, it, expect } from 'vitest';
 import {
@@ -14,7 +14,7 @@ import {
     DiscordError,
     EncryptionError,
     toError,
-} from '../../utils/errors/AppError.js';
+} from '../../../../utils/errors/AppError.js';
 
 describe('AppError', () => {
     it('creates operational error with correct properties', () => {

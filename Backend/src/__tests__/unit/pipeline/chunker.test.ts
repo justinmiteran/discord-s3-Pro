@@ -1,6 +1,6 @@
 import { vi, describe, it, expect } from 'vitest';
 
-vi.mock('../../config/index.js', () => ({
+vi.mock('../../../config/index.js', () => ({
     security: { jwtSecret: 'test-secret-key-32-characters!!', encryptionKey: Buffer.alloc(32) },
     database: { type: 'mongodb', mongoUri: 'mongodb://localhost:27017/test', jsonPath: '' },
     server: { port: 3000, chunkSize: 8388608 },
@@ -9,7 +9,7 @@ vi.mock('../../config/index.js', () => ({
     channels: ['123', '456'],
 }));
 
-vi.mock('../../utils/logger.js', () => ({
+vi.mock('../../../utils/logger.js', () => ({
     default: {
         debug: vi.fn(),
         info: vi.fn(),
@@ -21,8 +21,8 @@ vi.mock('../../utils/logger.js', () => ({
     },
 }));
 
-import { ChunkSplitter } from '../../pipeline/chunker.js';
-import logger from '../../utils/logger.js';
+import { ChunkSplitter } from '../../../pipeline/chunker.js';
+import logger from '../../../utils/logger.js';
 
 describe('chunker', () => {
     describe('ChunkSplitter', () => {

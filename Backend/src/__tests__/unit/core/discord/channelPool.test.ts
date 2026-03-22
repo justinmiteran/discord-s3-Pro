@@ -1,6 +1,6 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
-vi.mock('../../config/index.js', () => ({
+vi.mock('../../../../config/index.js', () => ({
     security: { jwtSecret: 'test-secret-key-32-characters!!', encryptionKey: Buffer.alloc(32) },
     database: { type: 'mongodb', mongoUri: 'mongodb://localhost:27017/test', jsonPath: '' },
     server: { port: 3000, chunkSize: 8388608 },
@@ -9,7 +9,7 @@ vi.mock('../../config/index.js', () => ({
     channels: ['channel1', 'channel2', 'channel3'],
 }));
 
-vi.mock('../../utils/logger.js', () => ({
+vi.mock('../../../../utils/logger.js', () => ({
     default: {
         debug: vi.fn(),
         info: vi.fn(),
@@ -26,7 +26,7 @@ describe('ChannelPool', () => {
 
     beforeEach(async () => {
         vi.resetModules();
-        const module = await import('../../core/discord/channelPool.js');
+        const module = await import('../../../../core/discord/channelPool.js');
         ChannelPool = module.default;
         (ChannelPool as any).currentIndex = 0;
     });

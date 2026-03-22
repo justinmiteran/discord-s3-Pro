@@ -1,6 +1,6 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 
-vi.mock('../../config/index.js', () => ({
+vi.mock('../../../config/index.js', () => ({
     security: { jwtSecret: 'test-secret-key-32-characters!!', encryptionKey: Buffer.alloc(32) },
     database: { type: 'mongodb', mongoUri: null, jsonPath: '' },
     server: { port: 3000, chunkSize: 8388608 },
@@ -8,7 +8,7 @@ vi.mock('../../config/index.js', () => ({
     auth: { mongoUri: 'mongodb://localhost:27017/test' },
 }));
 
-vi.mock('../../utils/logger.js', () => ({
+vi.mock('../../../utils/logger.js', () => ({
     default: {
         debug: vi.fn(),
         info: vi.fn(),
@@ -20,7 +20,7 @@ vi.mock('../../utils/logger.js', () => ({
     },
 }));
 
-import logger from '../../utils/logger.js';
+import logger from '../../../utils/logger.js';
 
 describe('queueManager', () => {
     let queueManager: any;
@@ -30,7 +30,7 @@ describe('queueManager', () => {
         vi.resetModules();
         vi.useFakeTimers();
 
-        const module = await import('../../core/queueManager.js');
+        const module = await import('../../../core/queueManager.js');
         queueManager = module.default;
         (queueManager as any).queue = [];
         (queueManager as any).processing = false;

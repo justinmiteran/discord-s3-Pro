@@ -3,7 +3,7 @@ import { Client, TextChannel } from 'discord.js';
 import { Response } from 'express';
 import { Readable } from 'stream';
 
-vi.mock('../../config/index.js', () => ({
+vi.mock('../../../config/index.js', () => ({
     security: { jwtSecret: 'test-secret-key-32-characters!!', encryptionKey: Buffer.alloc(32) },
     database: { type: 'mongodb', mongoUri: null, jsonPath: '' },
     server: { port: 3000, chunkSize: 100 },
@@ -12,7 +12,7 @@ vi.mock('../../config/index.js', () => ({
     channels: ['ch1', 'ch2'],
 }));
 
-vi.mock('../../utils/logger.js', () => ({
+vi.mock('../../../utils/logger.js', () => ({
     default: {
         debug: vi.fn(),
         info: vi.fn(),
@@ -25,22 +25,22 @@ vi.mock('../../utils/logger.js', () => ({
 }));
 
 const mockGetRepository = vi.fn();
-vi.mock('../../core/database.js', () => ({
+vi.mock('../../../core/database.js', () => ({
     getRepository: () => mockGetRepository(),
 }));
 
 const mockQueueAdd = vi.fn();
-vi.mock('../../core/queueManager.js', () => ({
+vi.mock('../../../core/queueManager.js', () => ({
     default: { add: (fn: any) => mockQueueAdd(fn) },
 }));
 
 let channelIndex = 0;
-vi.mock('../../core/discord/channelPool.js', () => ({
+vi.mock('../../../core/discord/channelPool.js', () => ({
     default: { next: () => ['ch1', 'ch2'][channelIndex++ % 2] },
 }));
 
-import { processUpload, downloadFile } from '../../core/storage/storageEngine.js';
-import { NotFoundError } from '../../utils/errors/AppError.js';
+import { processUpload, downloadFile } from '../../../core/storage/storageEngine.js';
+import { NotFoundError } from '../../../utils/errors/AppError.js';
 import fs from 'fs';
 
 vi.mock('fs');

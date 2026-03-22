@@ -8,7 +8,7 @@ const mockDeleteRefreshToken = vi.fn();
 const mockCountUsers = vi.fn();
 const mockCreateUser = vi.fn();
 
-vi.mock('../../repositories/userRepository.js', () => ({
+vi.mock('../../../../repositories/userRepository.js', () => ({
     findUserByUsername: (...a: any[]) => mockFindUserByUsername(...a),
     findUserById: (...a: any[]) => mockFindUserById(...a),
     findRefreshToken: (...a: any[]) => mockFindRefreshToken(...a),
@@ -17,14 +17,14 @@ vi.mock('../../repositories/userRepository.js', () => ({
     countUsers: () => mockCountUsers(),
     createUser: (...a: any[]) => mockCreateUser(...a),
 }));
-vi.mock('../../config/index.js', () => ({
+vi.mock('../../../../config/index.js', () => ({
     security: { jwtSecret: 'test-secret-key-32-characters!!', encryptionKey: Buffer.alloc(32) },
     database: { type: 'mongodb', mongoUri: null, jsonPath: '' },
     server: { port: 3000, chunkSize: 8388608 },
     discord: { token: 'test', channels: [] },
     auth: { mongoUri: 'mongodb://localhost:27017/test' },
 }));
-vi.mock('../../utils/logger.js', () => ({
+vi.mock('../../../../utils/logger.js', () => ({
     default: {
         debug: vi.fn(),
         info: vi.fn(),
@@ -39,8 +39,8 @@ vi.mock('../../utils/logger.js', () => ({
 import { describe, it, expect, beforeEach } from 'vitest';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { AuthError } from '../../utils/errors/AppError.js';
-import { login, refresh, logout, initAdmin } from '../../core/auth/authService.js';
+import { AuthError } from '../../../../utils/errors/AppError.js';
+import { login, refresh, logout, initAdmin } from '../../../../core/auth/authService.js';
 
 const HASH = await bcrypt.hash('password123', 4);
 const FAKE_USER = {

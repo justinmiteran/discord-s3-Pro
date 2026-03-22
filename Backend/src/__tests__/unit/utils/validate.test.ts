@@ -1,13 +1,13 @@
 import { vi } from 'vitest';
-import { mockConfig, mockLogger } from '../helpers/standardMocks.js';
+import { mockConfig, mockLogger } from '../../helpers/standardMocks.js';
 
-vi.mock('../../config/index.js', () => mockConfig);
-vi.mock('../../utils/logger.js', () => mockLogger);
+vi.mock('../../../config/index.js', () => mockConfig);
+vi.mock('../../../utils/logger.js', () => mockLogger);
 
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
-import { validate } from '../../api/middlewares/validate.js';
-import { ValidationError } from '../../utils/errors/AppError.js';
+import { validate } from '../../../api/middlewares/validate.js';
+import { ValidationError } from '../../../utils/errors/AppError.js';
 import type { Request, Response, NextFunction } from 'express';
 
 const mockReq = (body = {}, params = {}) => ({ body, params }) as unknown as Request;

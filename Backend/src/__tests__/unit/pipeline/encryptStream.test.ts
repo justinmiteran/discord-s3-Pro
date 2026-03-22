@@ -1,6 +1,6 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
-vi.mock('../../config/index.js', () => ({
+vi.mock('../../../config/index.js', () => ({
     security: {
         jwtSecret: 'test-secret-key-32-characters!!',
         encryptionKey: Buffer.alloc(32, 'a'),
@@ -12,7 +12,7 @@ vi.mock('../../config/index.js', () => ({
     channels: ['123', '456'],
 }));
 
-vi.mock('../../utils/logger.js', () => ({
+vi.mock('../../../utils/logger.js', () => ({
     default: {
         debug: vi.fn(),
         info: vi.fn(),
@@ -24,8 +24,8 @@ vi.mock('../../utils/logger.js', () => ({
     },
 }));
 
-import { encryptBuffer, decryptBuffer } from '../../pipeline/encryptStream.js';
-import { EncryptionError } from '../../utils/errors/AppError.js';
+import { encryptBuffer, decryptBuffer } from '../../../pipeline/encryptStream.js';
+import { EncryptionError } from '../../../utils/errors/AppError.js';
 
 describe('encryptStream', () => {
     describe('encryptBuffer', () => {

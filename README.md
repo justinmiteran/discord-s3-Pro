@@ -1,8 +1,5 @@
 # Discord S3 Pro
 
-![CI](https://github.com/YOUR_USERNAME/storageBot/workflows/CI/badge.svg)
-![Docker](https://github.com/YOUR_USERNAME/storageBot/workflows/Docker%20Build%20%26%20Push/badge.svg)
-
 A professional-grade, decentralized cloud storage solution that leverages Discord's infrastructure as a storage backend. Built with security, scalability, and maintainability in mind.
 
 ## 🎯 Key Features
@@ -24,9 +21,7 @@ A professional-grade, decentralized cloud storage solution that leverages Discor
 - [Configuration](#configuration)
 - [Usage](#usage)
 - [Development](#development)
-- [CI/CD](#cicd)
 - [Security](#security)
-- [Contributing](#contributing)
 - [License](#license)
 
 ## 🏗️ Architecture
@@ -268,50 +263,6 @@ See [Backend/src/__tests__/README.md](Backend/src/__tests__/README.md) for detai
 
 See [Backend/DEVELOPMENT.md](Backend/DEVELOPMENT.md) for detailed guidelines.
 
-## 🚀 CI/CD
-
-### GitHub Actions Workflows
-
-This project uses GitHub Actions for continuous integration and deployment (100% free tier).
-
-**Automated Workflows:**
-- ✅ **CI Pipeline**: Lint, tests, coverage, and build on every push/PR
-- 🐳 **Docker Build**: Multi-platform images pushed to GitHub Container Registry
-- 📦 **Release Automation**: Semantic versioning and changelog generation
-- 🔄 **Dependabot**: Automatic dependency updates
-
-**Pre-commit Hooks:**
-- Auto-format code with Prettier
-- Auto-fix ESLint issues
-- Validate commit messages (Conventional Commits)
-
-**Pull Request Process:**
-1. All CI checks must pass
-2. Code review required
-3. Conventional commit messages enforced
-4. Coverage thresholds maintained
-
-See [GITHUB_ACTIONS.md](GITHUB_ACTIONS.md) for complete setup guide.
-
-### Docker Images
-
-Pre-built images available at GitHub Container Registry:
-
-```bash
-# Pull latest
-docker pull ghcr.io/YOUR_USERNAME/storagebot:latest
-
-# Pull specific version
-docker pull ghcr.io/YOUR_USERNAME/storagebot:1.2.3
-
-# Run container
-docker run -d \
-  -e DISCORD_TOKEN=your_token \
-  -e ENCRYPTION_KEY=your_key \
-  -p 3000:3000 \
-  ghcr.io/YOUR_USERNAME/storagebot:latest
-```
-
 ## 🔒 Security
 
 ### Encryption
@@ -370,24 +321,11 @@ Access Mongo Express at `http://localhost:8081`
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-**Quick Start:**
 1. Fork the repository
-2. Create a feature branch (`feat/amazing-feature`)
-3. Follow code standards (enforced by pre-commit hooks)
-4. Add tests for new functionality
+2. Create a feature branch
+3. Follow code standards
+4. Add documentation
 5. Submit a pull request
-
-**Commit Message Format:**
-```
-type(scope): description
-
-Examples:
-feat(auth): add JWT refresh tokens
-fix(storage): resolve chunk corruption
-docs: update API documentation
-```
 
 ## 📄 License
 

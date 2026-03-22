@@ -1,5 +1,8 @@
 # Discord S3 Pro
 
+![Tests](https://github.com/justinmiteran/storageBot/workflows/Tests/badge.svg)
+![Lint](https://github.com/justinmiteran/storageBot/workflows/Lint/badge.svg)
+
 A professional-grade, decentralized cloud storage solution that leverages Discord's infrastructure as a storage backend. Built with security, scalability, and maintainability in mind.
 
 ## 🎯 Key Features

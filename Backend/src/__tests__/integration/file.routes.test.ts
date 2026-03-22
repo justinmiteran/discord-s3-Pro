@@ -114,7 +114,7 @@ describe('file.routes', () => {
         it('uploads file successfully', async () => {
             mockProcessUpload.mockResolvedValue('file123');
 
-            const res = await request(app).post('/upload').send({ filePath: 'C:\\test\\file.txt' });
+            const res = await request(app).post('/upload').send({ filePath: 'C:/test/file.txt' });
 
             expect(res.status).toBe(200);
             expect(res.body).toEqual({
@@ -124,7 +124,7 @@ describe('file.routes', () => {
             });
             expect(mockProcessUpload).toHaveBeenCalledWith(
                 mockClient,
-                'C:\\test\\file.txt',
+                'C:/test/file.txt',
                 'file.txt',
             );
         });
@@ -155,7 +155,7 @@ describe('file.routes', () => {
         it('returns 500 on upload failure', async () => {
             mockProcessUpload.mockRejectedValue(new Error('Upload failed'));
 
-            const res = await request(app).post('/upload').send({ filePath: 'C:\\test\\file.txt' });
+            const res = await request(app).post('/upload').send({ filePath: 'C:/test/file.txt' });
 
             expect(res.status).toBe(500);
         });

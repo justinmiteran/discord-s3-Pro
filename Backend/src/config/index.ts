@@ -48,7 +48,7 @@ export const discord = {
         if (channelList.length === 0) {
             logger.fatal('No Discord channels configured', undefined, {
                 section: 'Discord',
-                key: 'storage_channels'
+                key: 'storage_channels',
             });
             throw new Error('CRITICAL: No Discord storage channels configured in config.cfg');
         } else {
@@ -68,7 +68,7 @@ export const server = {
 
 logger.debug('Server configuration loaded', {
     port: server.port,
-    chunkSize: server.chunkSize
+    chunkSize: server.chunkSize,
 });
 
 /**
@@ -86,10 +86,20 @@ export const database = {
             : '',
 };
 
+/**
+ * Auth database configuration — always MongoDB, independent of storage backend
+ */
+export const auth = {
+    mongoUri: required(
+        userConfig.Auth?.mongo_uri ?? userConfig.Database?.mongo_uri,
+        'Auth.mongo_uri or Database.mongo_uri',
+    ),
+};
+
 logger.debug('Database configuration loaded', {
     type: database.type,
     hasMongoUri: !!database.mongoUri,
-    jsonPath: database.jsonPath
+    jsonPath: database.jsonPath,
 });
 
 /**
@@ -97,10 +107,11 @@ logger.debug('Database configuration loaded', {
  */
 export const security = {
     encryptionKey: Buffer.alloc(32, required(process.env.ENCRYPTION_KEY, 'ENCRYPTION_KEY')),
+    jwtSecret: required(process.env.JWT_SECRET, 'JWT_SECRET'),
 };
 
 logger.debug('Security configuration loaded', {
-    encryptionKeyLength: security.encryptionKey.length
+    encryptionKeyLength: security.encryptionKey.length,
 });
 
 logger.success('Configuration loaded successfully');

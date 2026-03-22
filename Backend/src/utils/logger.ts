@@ -39,12 +39,12 @@ interface LogEntry {
  * ANSI color codes for console output
  */
 const colors = {
-    debug: '\x1b[36m',    // Cyan
-    info: '\x1b[34m',     // Blue
-    success: '\x1b[32m',  // Green
-    warn: '\x1b[33m',     // Yellow
-    error: '\x1b[31m',    // Red
-    fatal: '\x1b[35m',    // Magenta
+    debug: '\x1b[36m', // Cyan
+    info: '\x1b[34m', // Blue
+    success: '\x1b[32m', // Green
+    warn: '\x1b[33m', // Yellow
+    error: '\x1b[31m', // Red
+    fatal: '\x1b[35m', // Magenta
     reset: '\x1b[0m',
     bold: '\x1b[1m',
     dim: '\x1b[2m',
@@ -113,10 +113,7 @@ class Logger {
                 const stats = fs.statSync(filePath);
                 if (stats.size > this.config.maxFileSize) {
                     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-                    const archivePath = path.join(
-                        this.logDir,
-                        `${file}.${timestamp}.archive`,
-                    );
+                    const archivePath = path.join(this.logDir, `${file}.${timestamp}.archive`);
                     fs.renameSync(filePath, archivePath);
                 }
             }
@@ -133,38 +130,51 @@ class Logger {
     /**
      * Formats log message for console output (inline format)
      */
-    private formatConsoleMessage(level: string, message: string, context?: Record<string, any>): string {
+    private formatConsoleMessage(
+        level: string,
+        message: string,
+        context?: Record<string, any>,
+    ): string {
         const timestamp = this.getTimestamp();
         const color = colors[level.toLowerCase() as keyof typeof colors] || colors.reset;
-        
+
         let output = `${colors.dim}[${timestamp}]${colors.reset} ${color}${colors.bold}[${level.toUpperCase()}]${colors.reset} ${message}`;
-        
+
         if (context && Object.keys(context).length > 0) {
             // Inline format: compact JSON on same line
             output += ` ${colors.dim}${JSON.stringify(context)}${colors.reset}`;
         }
-        
+
         return output;
     }
 
     /**
      * Formats log message for file output
      */
-    private formatFileMessage(level: string, message: string, context?: Record<string, any>): string {
+    private formatFileMessage(
+        level: string,
+        message: string,
+        context?: Record<string, any>,
+    ): string {
         const timestamp = this.getTimestamp();
         let output = `[${timestamp}] [${level.toUpperCase()}] ${message}`;
-        
+
         if (context && Object.keys(context).length > 0) {
             output += ` | Context: ${JSON.stringify(context)}`;
         }
-        
+
         return output;
     }
 
     /**
      * Creates structured log entry for JSON output
      */
-    private createLogEntry(level: string, message: string, context?: Record<string, any>, error?: Error): LogEntry {
+    private createLogEntry(
+        level: string,
+        message: string,
+        context?: Record<string, any>,
+        error?: Error,
+    ): LogEntry {
         const entry: LogEntry = {
             timestamp: this.getTimestamp(),
             level: level.toUpperCase(),
@@ -185,7 +195,13 @@ class Logger {
     /**
      * Core logging method
      */
-    private log(level: LogLevel, levelName: string, message: string, context?: Record<string, any>, error?: Error): void {
+    private log(
+        level: LogLevel,
+        levelName: string,
+        message: string,
+        context?: Record<string, any>,
+        error?: Error,
+    ): void {
         // Check if log level is enabled
         if (level < this.config.level) return;
 
@@ -202,7 +218,7 @@ class Logger {
         // File output
         if (this.config.enableFile) {
             const fileMsg = this.formatFileMessage(levelName, message, context);
-            
+
             // Write to app.log
             if (this.appLogStream) {
                 this.appLogStream.write(fileMsg + '\n');
@@ -269,11 +285,18 @@ class Logger {
     /**
      * HTTP request logging
      */
-    http(method: string, url: string, status: number, duration: number, context?: Record<string, any>): void {
+    http(
+        method: string,
+        url: string,
+        status: number,
+        duration: number,
+        context?: Record<string, any>,
+    ): void {
         const message = `${method} ${url} - ${status} (${duration}ms)`;
-        const level = status >= 500 ? LogLevel.ERROR : status >= 400 ? LogLevel.WARN : LogLevel.INFO;
+        const level =
+            status >= 500 ? LogLevel.ERROR : status >= 400 ? LogLevel.WARN : LogLevel.INFO;
         const levelName = status >= 500 ? 'error' : status >= 400 ? 'warn' : 'info';
-        
+
         this.log(level, levelName, message, {
             ...context,
             method,
@@ -309,8 +332,8 @@ class Logger {
 // Create and export singleton instance
 const logger = new Logger({
     level: process.env.LOG_LEVEL ? parseInt(process.env.LOG_LEVEL) : LogLevel.INFO,
-    enableConsole: true,
-    enableFile: true,
+    enableConsole: process.env.NODE_ENV !== 'test',
+    enableFile: process.env.NODE_ENV !== 'test',
     enableJson: process.env.LOG_JSON === 'true',
 });
 

@@ -15,6 +15,23 @@ export class AppError extends Error {
 }
 
 /**
+ * Normalizes any caught value into an Error instance
+ */
+export const toError = (err: unknown): Error => {
+    if (err instanceof Error) return err;
+    return new Error(String(err));
+};
+
+/**
+ * Error for authentication failures (401)
+ */
+export class AuthError extends AppError {
+    constructor(message: string) {
+        super(message, 401);
+    }
+}
+
+/**
  * Error for resource not found (404)
  */
 export class NotFoundError extends AppError {

@@ -3,7 +3,7 @@ import queue from '../queueManager.js';
 import logger from '../../utils/logger.js';
 import { getRepository } from '../database.js';
 import { DISCORD_ERROR_CODES } from '../../constants/index.js';
-import { NotFoundError } from '../../utils/errors/AppError.js';
+import { NotFoundError, toError } from '../../utils/errors/AppError.js';
 
 /**
  * Deletes a file completely from Discord and the registry
@@ -25,7 +25,7 @@ export const deleteFile = async (client: Client, fileId: string): Promise<string
     logger.info('Starting file deletion', {
         fileId,
         fileName: file.name,
-        chunks: file.chunks.length
+        chunks: file.chunks.length,
     });
 
     let deletedChunks = 0;
@@ -38,7 +38,7 @@ export const deleteFile = async (client: Client, fileId: string): Promise<string
                 if (!channel) {
                     logger.warn('Channel not found for chunk deletion', {
                         channelId: chunk.cId,
-                        messageId: chunk.mId
+                        messageId: chunk.mId,
                     });
                     failedChunks++;
                     return;
@@ -47,22 +47,21 @@ export const deleteFile = async (client: Client, fileId: string): Promise<string
                 const msg = await channel.messages.fetch(chunk.mId);
                 await msg.delete();
                 deletedChunks++;
-                
+
                 logger.debug('Chunk deleted', {
                     messageId: chunk.mId,
                     channelId: chunk.cId,
-                    progress: `${deletedChunks}/${file.chunks.length}`
+                    progress: `${deletedChunks}/${file.chunks.length}`,
                 });
-            } catch (err: any) {
-                if (err.code === DISCORD_ERROR_CODES.MESSAGE_NOT_FOUND) {
-                    logger.debug('Chunk already deleted', {
-                        messageId: chunk.mId
-                    });
+            } catch (err) {
+                const error = toError(err);
+                if ((err as any).code === DISCORD_ERROR_CODES.MESSAGE_NOT_FOUND) {
+                    logger.debug('Chunk already deleted', { messageId: chunk.mId });
                     deletedChunks++;
                 } else {
                     logger.warn('Chunk deletion failed', {
                         messageId: chunk.mId,
-                        error: err.message
+                        error: error.message,
                     });
                     failedChunks++;
                 }
@@ -71,7 +70,7 @@ export const deleteFile = async (client: Client, fileId: string): Promise<string
     }
 
     await repo.deleteFile(fileId);
-    
+
     const duration = Date.now() - startTime;
     logger.success('File deletion completed', {
         fileId,
@@ -79,7 +78,7 @@ export const deleteFile = async (client: Client, fileId: string): Promise<string
         deletedChunks,
         failedChunks,
         totalChunks: file.chunks.length,
-        duration
+        duration,
     });
 
     return file.name;

@@ -8,27 +8,45 @@
         "start": "node dist/src/index.js",
         "dev": "tsx src/index.ts",
         "build": "tsc",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "test:coverage": "vitest run --coverage",
+        "test:coverage:watch": "vitest --coverage",
         "lint": "eslint .",
         "lint:fix": "eslint . --fix",
-        "format": "prettier . --write"
+        "format": "prettier . --write",
+        "format:check": "prettier . --check",
+        "prepare": "cd .. && husky Backend/.husky"
     },
     "dependencies": {
         "axios": "^1.13.6",
+        "bcrypt": "^6.0.0",
         "discord.js": "^14.25.1",
         "dotenv": "^17.3.1",
         "express": "^5.2.1",
+        "express-rate-limit": "^8.3.1",
         "ini": "^6.0.0",
-        "mongodb": "^6.21.0"
+        "jsonwebtoken": "^9.0.3",
+        "mongodb": "^6.21.0",
+        "zod": "^4.3.6"
     },
     "devDependencies": {
+        "@types/bcrypt": "^6.0.0",
         "@types/express": "^5.0.0",
         "@types/ini": "^4.1.1",
+        "@types/jsonwebtoken": "^9.0.10",
         "@types/node": "^22.13.4",
+        "@types/supertest": "^6.0.2",
+        "@vitest/coverage-v8": "^2.1.9",
         "eslint": "^9.39.3",
         "eslint-config-prettier": "^10.1.8",
         "eslint-plugin-import": "^2.32.0",
+        "husky": "^9.1.7",
+        "lint-staged": "^16.4.0",
         "prettier": "^3.8.1",
+        "supertest": "^7.0.0",
         "tsx": "^4.19.2",
-        "typescript": "^5.7.3"
+        "typescript": "^5.7.3",
+        "vitest": "^2.1.9"
     }
 }

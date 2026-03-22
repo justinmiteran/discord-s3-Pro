@@ -1,4 +1,5 @@
 import logger from '../utils/logger.js';
+import { toError } from '../utils/errors/AppError.js';
 import { QUEUE } from '../constants/index.js';
 
 interface QueueTask<T = any> {
@@ -25,18 +26,18 @@ class QueueManager {
     async add<T>(task: () => Promise<T>): Promise<T> {
         return new Promise((resolve, reject) => {
             this.queue.push({ task, resolve, reject });
-            
+
             if (this.queue.length > 10) {
                 logger.warn('Queue size growing', {
                     queueSize: this.queue.length,
-                    totalHandled: this.totalTasksHandled
+                    totalHandled: this.totalTasksHandled,
                 });
             } else {
                 logger.debug('Task added to queue', {
-                    queueSize: this.queue.length
+                    queueSize: this.queue.length,
                 });
             }
-            
+
             this.process();
         });
     }
@@ -65,23 +66,23 @@ class QueueManager {
             if (result && (result as any).headers) {
                 const remaining = (result as any).headers['x-ratelimit-remaining'];
                 const limit = (result as any).headers['x-ratelimit-limit'];
-                
+
                 if (remaining === '0') {
                     this.rateLimitHits++;
                     const resetAfter =
                         (parseInt((result as any).headers['x-ratelimit-reset-after']) || 1) * 1000;
-                    
+
                     logger.warn('Rate limit hit', {
                         resetAfter,
                         totalHits: this.rateLimitHits,
-                        queueSize: this.queue.length
+                        queueSize: this.queue.length,
                     });
-                    
+
                     await new Promise((r) => setTimeout(r, resetAfter));
                 } else if (parseInt(remaining) < 5) {
                     logger.debug('Rate limit approaching', {
                         remaining,
-                        limit
+                        limit,
                     });
                 }
             }
@@ -89,23 +90,23 @@ class QueueManager {
             logger.debug('Task completed', {
                 duration,
                 queueSize: this.queue.length,
-                totalHandled: this.totalTasksHandled
+                totalHandled: this.totalTasksHandled,
             });
 
             resolve(result);
-        } catch (error: any) {
-            logger.error('Queue task failed', error, {
+        } catch (error: unknown) {
+            logger.error('Queue task failed', toError(error), {
                 queueSize: this.queue.length,
-                totalHandled: this.totalTasksHandled
+                totalHandled: this.totalTasksHandled,
             });
-            reject(error);
+            reject(toError(error));
         } finally {
             this.processing = false;
 
             if (this.queue.length === 0 && this.totalTasksHandled > 0) {
                 logger.debug('Queue emptied', {
                     totalHandled: this.totalTasksHandled,
-                    rateLimitHits: this.rateLimitHits
+                    rateLimitHits: this.rateLimitHits,
                 });
             }
 
@@ -119,7 +120,7 @@ class QueueManager {
     public get length(): number {
         return this.queue.length;
     }
-    
+
     /**
      * Returns queue statistics
      */
@@ -128,7 +129,7 @@ class QueueManager {
             queueSize: this.queue.length,
             totalHandled: this.totalTasksHandled,
             rateLimitHits: this.rateLimitHits,
-            isProcessing: this.processing
+            isProcessing: this.processing,
         };
     }
 }

@@ -16,7 +16,7 @@ import logger from '../../utils/logger.js';
 import { pipeline, Writable } from 'stream';
 import { promisify } from 'util';
 import { ERROR_CODES } from '../../constants/index.js';
-import { NotFoundError, DiscordError } from '../../utils/errors/AppError.js';
+import { NotFoundError, DiscordError, toError } from '../../utils/errors/AppError.js';
 
 const pipelinePromise = promisify(pipeline);
 
@@ -34,16 +34,16 @@ export const processUpload = async (
 ): Promise<string> => {
     const startTime = Date.now();
     const stats = fs.statSync(filePath);
-    
+
     logger.info('Starting file upload', {
         fileName: originalName,
         size: stats.size,
-        sizeFormatted: `${(stats.size / 1024 / 1024).toFixed(2)} MB`
+        sizeFormatted: `${(stats.size / 1024 / 1024).toFixed(2)} MB`,
     });
-    
+
     const fileHash = await hasher.calculateHash(filePath);
     logger.debug('File hash calculated', { hash: fileHash });
-    
+
     const chunksMetadata: ChunkMetadata[] = [];
 
     const splitter = new ChunkSplitter(server.chunkSize);
@@ -77,17 +77,17 @@ export const processUpload = async (
                     chunkIndex: currentChunkIndex,
                     channelId,
                     messageId: result.id,
-                    size: `${(encrypted.length / 1024).toFixed(2)} KB`
+                    size: `${(encrypted.length / 1024).toFixed(2)} KB`,
                 });
 
                 chunksMetadata.push({ mId: result.id, cId: channelId });
                 callback();
-            } catch (err: any) {
-                logger.error('Chunk upload failed', err, {
+            } catch (err) {
+                logger.error('Chunk upload failed', toError(err), {
                     chunkIndex: chunkSequence,
-                    fileName: originalName
+                    fileName: originalName,
                 });
-                callback(new DiscordError(err.message));
+                callback(toError(err));
             }
         },
     });
@@ -107,7 +107,7 @@ export const processUpload = async (
         };
 
         await getRepository().saveFile(fileData);
-        
+
         const duration = Date.now() - startTime;
         logger.success('File upload completed', {
             fileId,
@@ -115,18 +115,18 @@ export const processUpload = async (
             chunks: chunksMetadata.length,
             size: stats.size,
             duration,
-            hash: fileHash
+            hash: fileHash,
         });
 
         return fileId;
-    } catch (err: any) {
+    } catch (err) {
         const duration = Date.now() - startTime;
-        logger.error('Upload pipeline failed', err, {
+        logger.error('Upload pipeline failed', toError(err), {
             fileName: originalName,
             duration,
-            chunksUploaded: chunksMetadata.length
+            chunksUploaded: chunksMetadata.length,
         });
-        throw err;
+        throw toError(err);
     }
 };
 
@@ -143,7 +143,7 @@ export const downloadFile = async (
 ): Promise<void> => {
     const startTime = Date.now();
     const file = await getRepository().getFile(fileId);
-    
+
     if (!file) {
         logger.warn('File not found for download', { fileId });
         throw new NotFoundError('File');
@@ -154,7 +154,7 @@ export const downloadFile = async (
         fileName: file.name,
         chunks: file.chunks.length,
         size: file.size,
-        sizeFormatted: `${(file.size / 1024 / 1024).toFixed(2)} MB`
+        sizeFormatted: `${(file.size / 1024 / 1024).toFixed(2)} MB`,
     });
 
     res.setHeader('Content-Disposition', `attachment; filename="${file.name}"`);
@@ -162,14 +162,9 @@ export const downloadFile = async (
 
     const gunzip = zlib.createGunzip();
 
-    gunzip.on('error', (err: any) => {
-        logger.error('Decompression failed', err, {
-            fileId,
-            fileName: file.name
-        });
-        if (!res.headersSent) {
-            res.status(500).send('Stream decompression error.');
-        }
+    gunzip.on('error', (err) => {
+        logger.error('Decompression failed', toError(err), { fileId, fileName: file.name });
+        if (!res.headersSent) res.status(500).send('Stream decompression error.');
     });
 
     gunzip.pipe(hasher.createVerificationStream(file.hash, file.name)).pipe(res);
@@ -193,7 +188,7 @@ export const downloadFile = async (
                     fileName: file.name,
                     chunkIndex: downloadedChunks,
                     messageId: chunk.mId,
-                    channelId: chunk.cId
+                    channelId: chunk.cId,
                 });
                 throw new DiscordError(
                     `${ERROR_CODES.CHUNK_LOST}: Chunk #${downloadedChunks} missing from Discord message.`,
@@ -208,7 +203,7 @@ export const downloadFile = async (
                 chunkIndex: downloadedChunks,
                 totalChunks: file.chunks.length,
                 chunkSize: `${(decrypted.length / 1024 / 1024).toFixed(2)} MB`,
-                progress: `${((downloadedChunks / file.chunks.length) * 100).toFixed(1)}%`
+                progress: `${((downloadedChunks / file.chunks.length) * 100).toFixed(1)}%`,
             });
 
             const canContinue = gunzip.write(decrypted);
@@ -219,7 +214,7 @@ export const downloadFile = async (
         }
 
         gunzip.end();
-        
+
         const duration = Date.now() - startTime;
         logger.success('File download completed', {
             fileId,
@@ -227,14 +222,14 @@ export const downloadFile = async (
             chunks: downloadedChunks,
             totalBytes,
             duration,
-            throughput: `${((totalBytes / 1024 / 1024) / (duration / 1000)).toFixed(2)} MB/s`
+            throughput: `${(totalBytes / 1024 / 1024 / (duration / 1000)).toFixed(2)} MB/s`,
         });
-    } catch (err: any) {
+    } catch (err) {
         const duration = Date.now() - startTime;
-        logger.error('Download pipeline aborted', err, {
+        logger.error('Download pipeline aborted', toError(err), {
             fileId,
             fileName: file.name,
-            duration
+            duration,
         });
         gunzip.destroy();
         if (!res.headersSent) {

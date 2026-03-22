@@ -1,16 +1,25 @@
+FROM node:20-slim AS builder
+
+WORKDIR /usr/src/app
+
+COPY package*.json tsconfig.json ./
+RUN npm install
+
+COPY src/ ./src/
+RUN npm run build
+
+# ---
+
 FROM node:20-slim
 
 WORKDIR /usr/src/app
 
-# Install dependencies
 COPY package*.json ./
 RUN npm install --omit=dev
 
-# Copy application source
-COPY . .
+COPY --from=builder /usr/src/app/dist ./dist
+COPY config.cfg ./
 
-# Expose API port
 EXPOSE 3000
 
-# Start system with the bootstrap logic
-CMD [ "node", "index.js" ]
+CMD [ "node", "dist/src/index.js" ]

@@ -1,10 +1,10 @@
 # Discord S3 Pro
 
-![Tests](https://github.com/justinmiteran/storageBot/workflows/Tests/badge.svg)
-![Lint](https://github.com/justinmiteran/storageBot/workflows/Lint/badge.svg)
-![Coverage](https://github.com/justinmiteran/storageBot/workflows/Coverage/badge.svg)
-![Docker](https://github.com/justinmiteran/storageBot/workflows/Docker/badge.svg)
-![Security](https://github.com/justinmiteran/storageBot/workflows/Security/badge.svg)
+![Tests](https://github.com/justinmiteran/discord-s3-Pro/workflows/Tests/badge.svg)
+![Lint](https://github.com/justinmiteran/discord-s3-Pro/workflows/Lint/badge.svg)
+![Coverage](https://github.com/justinmiteran/discord-s3-Pro/workflows/Coverage/badge.svg)
+![Docker](https://github.com/justinmiteran/discord-s3-Pro/workflows/Docker/badge.svg)
+![Security](https://github.com/justinmiteran/discord-s3-Pro/workflows/Security/badge.svg)
 
 A professional-grade, decentralized cloud storage solution that leverages Discord's infrastructure as a storage backend. Built with security, scalability, and maintainability in mind.
 
@@ -21,14 +21,14 @@ A professional-grade, decentralized cloud storage solution that leverages Discor
 
 ## 📋 Table of Contents
 
-- [Architecture](#architecture)
-- [Quick Start](#quick-start)
-- [Project Structure](#project-structure)
-- [Configuration](#configuration)
-- [Usage](#usage)
-- [Development](#development)
-- [Security](#security)
-- [License](#license)
+- [Architecture](#️-architecture)
+- [Quick Start](#-quick-start)
+- [Project Structure](#-project-structure)
+- [Configuration](#️-configuration)
+- [Usage](#-usage)
+- [Development](#️-development)
+- [Security](#-security)
+- [License](#-license)
 
 ## 🏗️ Architecture
 

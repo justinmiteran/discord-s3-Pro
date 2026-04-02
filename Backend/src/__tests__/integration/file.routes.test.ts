@@ -59,6 +59,7 @@ describe('file.routes', () => {
         mockRepository = {
             listFiles: vi.fn(),
             getFile: vi.fn(),
+            getChunkRegistry: vi.fn(),
         };
 
         mockGetRepository.mockReturnValue(mockRepository);
@@ -76,8 +77,7 @@ describe('file.routes', () => {
                     name: 'test1.txt',
                     size: 1024,
                     hash: 'hash1',
-                    chunks: [],
-                    compressed: true,
+                    chunkRegistryId: 'reg1',
                     uploadedAt: new Date().toISOString(),
                 },
                 {
@@ -85,12 +85,20 @@ describe('file.routes', () => {
                     name: 'test2.txt',
                     size: 2048,
                     hash: 'hash2',
-                    chunks: [],
-                    compressed: true,
+                    chunkRegistryId: 'reg2',
                     uploadedAt: new Date().toISOString(),
                 },
             ];
+            const mockRegistry = {
+                id: 'reg1',
+                hash: 'hash1',
+                chunks: [],
+                refCount: 1,
+                compressed: true,
+                createdAt: new Date().toISOString(),
+            };
             mockRepository.listFiles.mockResolvedValue(mockFiles);
+            mockRepository.getChunkRegistry.mockResolvedValue(mockRegistry);
 
             const res = await request(app).get('/list');
 

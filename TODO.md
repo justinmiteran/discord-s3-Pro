@@ -14,14 +14,14 @@
 
 ## ⚡ Short Term (1–2 weeks)
 
-- [ ] File deduplication based on SHA-256 hash
+- [x] File deduplication based on SHA-256 hash
 - [x] Server-side rate limiting (`express-rate-limit`)
-- [ ] PowerShell CLI — add progress bar
-- [ ] PowerShell CLI — add upload resume on failure
-- [ ] Swagger/OpenAPI documentation
-- [ ] Max file size validation (configurable limit)
-- [ ] Prevent sensitive data from leaking into logs
-- [ ] Encryption key rotation mechanism without data loss
+- [x] PowerShell CLI — add progress bar
+- [x] PowerShell CLI — add upload resume on failure
+- [x] Swagger/OpenAPI documentation
+- [x] Max file size validation (configurable limit)
+- [x] Prevent sensitive data from leaking into logs
+- [x] Encryption key rotation mechanism without data loss
 - [ ] MongoDB connection pool explicit configuration
 
 ## 📅 Medium Term (1–2 months)

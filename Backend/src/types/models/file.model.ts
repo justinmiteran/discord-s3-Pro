@@ -9,7 +9,27 @@ export interface ChunkMetadata {
 }
 
 /**
- * Complete file metadata stored in the registry
+ * Physical storage registry for chunks (deduplication layer)
+ */
+export interface ChunkRegistry {
+    /** Unique registry identifier */
+    id: string;
+    /** SHA-256 hash of the original file */
+    hash: string;
+    /** Array of chunk locations in Discord */
+    chunks: ChunkMetadata[];
+    /** Number of files referencing this registry */
+    refCount: number;
+    /** Whether the data is compressed */
+    compressed: boolean;
+    /** Encryption key ID used for this registry */
+    encryptionKeyId?: string;
+    /** ISO timestamp of creation */
+    createdAt: string;
+}
+
+/**
+ * User file metadata (presentation layer)
  */
 export interface FileData {
     /** Unique file identifier */
@@ -18,12 +38,10 @@ export interface FileData {
     name: string;
     /** SHA-256 hash for integrity verification */
     hash: string;
-    /** Array of chunk locations in Discord */
-    chunks: ChunkMetadata[];
+    /** Reference to the chunk registry */
+    chunkRegistryId: string;
     /** Original file size in bytes */
     size: number;
-    /** Whether the file is compressed */
-    compressed: boolean;
     /** ISO timestamp of upload */
     uploadedAt: string;
 }

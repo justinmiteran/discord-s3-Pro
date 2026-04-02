@@ -1,7 +1,7 @@
 import { MongoClient, Db } from 'mongodb';
 import { database } from '../config/index.js';
 import { IRepository } from '../types/interfaces/repository.interface.js';
-import { FileData } from '../types/models/file.model.js';
+import { FileData, ChunkRegistry } from '../types/models/file.model.js';
 import { toError } from '../utils/errors/AppError.js';
 import logger from '../utils/logger.js';
 
@@ -27,7 +27,7 @@ const mongodbRepository: IRepository = {
 
         const startTime = Date.now();
         logger.info('Connecting to MongoDB', {
-            uri: database.mongoUri.replace(/\/\/([^:]+):([^@]+)@/, '//$1:****@'), // Hide password
+            uri: database.mongoUri.replace(/\/\/([^:]+):([^@]+)@/, '//$1:****@'),
         });
 
         try {
@@ -36,6 +36,9 @@ const mongodbRepository: IRepository = {
 
             const duration = Date.now() - startTime;
             const stats = await db.stats();
+
+            await db.collection('chunk_registry').createIndex({ hash: 1 });
+            logger.debug('MongoDB index created', { collection: 'chunk_registry', field: 'hash' });
 
             logger.success('MongoDB connected', {
                 database: db.databaseName,
@@ -105,6 +108,8 @@ const mongodbRepository: IRepository = {
         }
     },
 
+
+
     async listFiles() {
         if (!db) {
             logger.error('MongoDB not connected', undefined, {
@@ -153,6 +158,188 @@ const mongodbRepository: IRepository = {
             }
         } catch (err) {
             logger.error('Failed to delete file from MongoDB', toError(err), { fileId });
+            throw toError(err);
+        }
+    },
+
+    async saveChunkRegistry(registry: ChunkRegistry) {
+        if (!db) {
+            logger.error('MongoDB not connected', undefined, { operation: 'saveChunkRegistry' });
+            throw new Error('Database not connected');
+        }
+
+        logger.debug('Saving chunk registry to MongoDB', { registryId: registry.id, hash: registry.hash });
+
+        try {
+            const { id, ...rest } = registry;
+            await db.collection('chunk_registry').replaceOne(
+                { _id: id as any },
+                { _id: id as any, ...rest },
+                { upsert: true }
+            );
+            logger.debug('Chunk registry saved to MongoDB', { registryId: id });
+        } catch (err) {
+            logger.error('Failed to save chunk registry to MongoDB', toError(err), { registryId: registry.id });
+            throw toError(err);
+        }
+    },
+
+    async updateChunkRegistryData(registryId: string, chunks: ChunkRegistry['chunks'], encryptionKeyId: string) {
+        if (!db) {
+            logger.error('MongoDB not connected', undefined, { operation: 'updateChunkRegistryData' });
+            throw new Error('Database not connected');
+        }
+
+        logger.debug('Updating chunk registry data (chunks + encryptionKeyId only)', { 
+            registryId, 
+            chunksCount: chunks.length,
+            encryptionKeyId 
+        });
+
+        try {
+            const result = await db.collection('chunk_registry').updateOne(
+                { _id: registryId as any },
+                { 
+                    $set: { 
+                        chunks,
+                        encryptionKeyId 
+                    } 
+                }
+            );
+
+            if (result.matchedCount === 0) {
+                logger.error('Cannot update chunk registry: not found', undefined, { registryId });
+                throw new Error(`Chunk registry ${registryId} not found`);
+            }
+
+            logger.debug('Chunk registry data updated', { registryId });
+        } catch (err) {
+            logger.error('Failed to update chunk registry data in MongoDB', toError(err), { registryId });
+            throw toError(err);
+        }
+    },
+
+    async getChunkRegistry(registryId: string) {
+        if (!db) {
+            logger.error('MongoDB not connected', undefined, { operation: 'getChunkRegistry' });
+            throw new Error('Database not connected');
+        }
+
+        logger.debug('Retrieving chunk registry from MongoDB', { registryId });
+
+        try {
+            const doc = await db.collection('chunk_registry').findOne({ _id: registryId as any });
+
+            if (!doc) {
+                logger.debug('Chunk registry not found in MongoDB', { registryId });
+                return null;
+            }
+
+            const { _id, ...rest } = doc;
+            return { id: _id.toString(), ...rest } as unknown as ChunkRegistry;
+        } catch (err) {
+            logger.error('Failed to retrieve chunk registry from MongoDB', toError(err), { registryId });
+            throw toError(err);
+        }
+    },
+
+    async getChunkRegistryByHash(hash: string) {
+        if (!db) {
+            logger.error('MongoDB not connected', undefined, { operation: 'getChunkRegistryByHash' });
+            throw new Error('Database not connected');
+        }
+
+        logger.debug('Retrieving chunk registry by hash from MongoDB', { hash });
+
+        try {
+            const doc = await db.collection('chunk_registry').findOne({ hash });
+
+            if (!doc) {
+                logger.debug('Chunk registry not found by hash in MongoDB', { hash });
+                return null;
+            }
+
+            const { _id, ...rest } = doc;
+            return { id: _id.toString(), ...rest } as unknown as ChunkRegistry;
+        } catch (err) {
+            logger.error('Failed to retrieve chunk registry by hash from MongoDB', toError(err), { hash });
+            throw toError(err);
+        }
+    },
+
+    async incrementChunkRegistryRefCount(registryId: string) {
+        if (!db) {
+            logger.error('MongoDB not connected', undefined, { operation: 'incrementChunkRegistryRefCount' });
+            throw new Error('Database not connected');
+        }
+
+        logger.debug('Incrementing refCount for chunk registry', { registryId });
+
+        try {
+            const result = await db.collection('chunk_registry').updateOne(
+                { _id: registryId as any },
+                { $inc: { refCount: 1 } }
+            );
+
+            if (result.matchedCount === 0) {
+                logger.error('Cannot increment refCount: chunk registry not found', undefined, { registryId });
+                throw new Error(`Chunk registry ${registryId} not found`);
+            }
+
+            logger.debug('RefCount incremented', { registryId });
+        } catch (err) {
+            logger.error('Failed to increment refCount in MongoDB', toError(err), { registryId });
+            throw toError(err);
+        }
+    },
+
+    async decrementChunkRegistryRefCount(registryId: string): Promise<number> {
+        if (!db) {
+            logger.error('MongoDB not connected', undefined, { operation: 'decrementChunkRegistryRefCount' });
+            throw new Error('Database not connected');
+        }
+
+        logger.debug('Decrementing refCount for chunk registry', { registryId });
+
+        try {
+            const result = await db.collection('chunk_registry').findOneAndUpdate(
+                { _id: registryId as any },
+                { $inc: { refCount: -1 } },
+                { returnDocument: 'after' }
+            );
+
+            if (!result) {
+                logger.error('Cannot decrement refCount: chunk registry not found', undefined, { registryId });
+                throw new Error(`Chunk registry ${registryId} not found`);
+            }
+
+            const newRefCount = Math.max(result.refCount || 0, 0);
+            logger.debug('RefCount decremented', { registryId, newRefCount });
+            return newRefCount;
+        } catch (err) {
+            logger.error('Failed to decrement refCount in MongoDB', toError(err), { registryId });
+            throw toError(err);
+        }
+    },
+
+    async deleteChunkRegistry(registryId: string) {
+        if (!db) {
+            logger.error('MongoDB not connected', undefined, { operation: 'deleteChunkRegistry' });
+            throw new Error('Database not connected');
+        }
+
+        logger.debug('Deleting chunk registry from MongoDB', { registryId });
+
+        try {
+            const result = await db.collection('chunk_registry').deleteOne({ _id: registryId as any });
+
+            if (result.deletedCount === 0) {
+                logger.warn('Chunk registry not found in MongoDB for deletion', { registryId });
+            } else {
+                logger.debug('Chunk registry deleted from MongoDB', { registryId });
+            }
+        } catch (err) {
+            logger.error('Failed to delete chunk registry from MongoDB', toError(err), { registryId });
             throw toError(err);
         }
     },

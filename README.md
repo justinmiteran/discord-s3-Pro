@@ -15,6 +15,7 @@ A professional-grade, decentralized cloud storage solution that leverages Discor
 - **⚡ Stream Processing**: Memory-efficient handling of files of any size
 - **🔄 Load Balancing**: Multi-channel distribution for optimal performance
 - **🛡️ Data Integrity**: SHA-256 hashing ensures file consistency
+- **♻️ Smart Deduplication**: Automatic detection and reuse of identical files
 - **🗄️ Flexible Storage**: MongoDB or JSON-based metadata storage
 - **🚦 Rate Limit Management**: Intelligent queue system for API compliance
 - **🐳 Docker Ready**: Full containerization support
@@ -53,17 +54,40 @@ A professional-grade, decentralized cloud storage solution that leverages Discor
 └──────────────┘ └──────────┘ └──────────────┘
 ```
 
+### Data Model
+
+The system uses a **two-layer architecture** for clean separation of concerns:
+
+**1. FileData (User Layer)**
+- User-facing metadata: filename, size, upload date
+- References a ChunkRegistry via `chunkRegistryId`
+- Multiple files can reference the same registry (deduplication)
+
+**2. ChunkRegistry (Storage Layer)**
+- Physical storage: Discord message IDs, channel IDs
+- Reference counting: tracks how many files use these chunks
+- Automatic cleanup: chunks deleted when refCount reaches 0
+
 ### Data Flow
 
 **Upload Process:**
-1. File → Compression (gzip) → Chunking (8MB) → Encryption (AES-256-GCM)
-2. Encrypted chunks → Queue → Discord channels
-3. Metadata → Database (MongoDB/JSON)
+1. File → Hash calculation (SHA-256) → Deduplication check
+2. If duplicate: Reuse existing ChunkRegistry (instant upload, refCount++)
+3. If new: Compression (gzip) → Chunking (8MB) → Encryption (AES-256-GCM)
+4. Encrypted chunks → Queue → Discord channels
+5. Create ChunkRegistry (refCount=1) → Create FileData → Database (MongoDB/JSON)
 
 **Download Process:**
-1. Fetch metadata from database
-2. Retrieve chunks from Discord → Decrypt → Decompress
-3. Verify integrity (SHA-256) → Stream to client
+1. Fetch FileData from database
+2. Fetch ChunkRegistry via chunkRegistryId
+3. Retrieve chunks from Discord → Decrypt → Decompress
+4. Verify integrity (SHA-256) → Stream to client
+
+**Delete Process:**
+1. Delete FileData from database
+2. Decrement ChunkRegistry refCount
+3. If refCount = 0: Delete chunks from Discord + Delete ChunkRegistry
+4. If refCount > 0: Keep chunks (other files still reference them)
 
 ## 🚀 Quick Start
 
@@ -250,10 +274,10 @@ npm run test:coverage # Run tests with coverage report
 ### Testing
 
 Comprehensive test suite with strict coverage thresholds:
-- **170 tests** across unit, integration, and E2E levels
+- **194 tests** across unit, integration, and E2E levels
 - **Coverage thresholds**: 80% statements, 75% branches, 80% functions
 - **Test categories**:
-  - Unit tests: Core business logic, data processing, infrastructure
+  - Unit tests: Core business logic, data processing, infrastructure, deduplication
   - Integration tests: HTTP endpoints, route handlers
   - E2E tests: Full application stack
 
@@ -280,6 +304,15 @@ See [Backend/DEVELOPMENT.md](Backend/DEVELOPMENT.md) for detailed guidelines.
 - **Hashing**: SHA-256 for all files
 - **Verification**: Automatic on download
 - **Corruption Detection**: Immediate notification
+
+### Deduplication Architecture
+- **Two-Layer Model**: Separates user metadata (FileData) from physical storage (ChunkRegistry)
+- **Hash-Based**: Files with identical SHA-256 hashes reference the same ChunkRegistry
+- **Reference Counting**: ChunkRegistry tracks how many files use its chunks
+- **Automatic Cleanup**: Chunks deleted from Discord only when refCount reaches 0
+- **Space Efficiency**: Eliminates redundant storage on Discord
+- **Privacy**: Each file maintains independent metadata (name, upload date)
+- **Instant Uploads**: Duplicate files skip compression/encryption/upload steps
 
 ### Best Practices
 - Never commit `.env` files

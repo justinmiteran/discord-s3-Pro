@@ -64,11 +64,13 @@ export const discord = {
 export const server = {
     port: parseInt(required(userConfig.Server?.port, 'Server.port')),
     chunkSize: parseInt(required(userConfig.Server?.chunk_size, 'Server.chunk_size')),
+    maxFileSize: parseInt(userConfig.Server?.max_file_size || '524288000'), // Default: 500 MB
 };
 
 logger.debug('Server configuration loaded', {
     port: server.port,
     chunkSize: server.chunkSize,
+    maxFileSize: server.maxFileSize,
 });
 
 /**
@@ -106,13 +108,10 @@ logger.debug('Database configuration loaded', {
  * Security configuration
  */
 export const security = {
-    encryptionKey: Buffer.alloc(32, required(process.env.ENCRYPTION_KEY, 'ENCRYPTION_KEY')),
     jwtSecret: required(process.env.JWT_SECRET, 'JWT_SECRET'),
 };
 
-logger.debug('Security configuration loaded', {
-    encryptionKeyLength: security.encryptionKey.length,
-});
+logger.debug('Security configuration loaded');
 
 logger.success('Configuration loaded successfully');
 
@@ -120,7 +119,6 @@ logger.success('Configuration loaded successfully');
  * Legacy exports for backward compatibility
  */
 export const token = discord.token;
-export const encryptionKey = security.encryptionKey;
 export const port = server.port;
 export const chunkSize = server.chunkSize;
 export const dbType = database.type;

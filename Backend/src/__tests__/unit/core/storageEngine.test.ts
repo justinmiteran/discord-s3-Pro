@@ -3,6 +3,22 @@ import { Client, TextChannel } from 'discord.js';
 import { Response } from 'express';
 import { Readable } from 'stream';
 
+vi.mock('../../../core/keyRotation.js', () => ({
+    keyRotationManager: {
+        getActiveKey: vi.fn(() => ({ id: 'test-key', key: Buffer.alloc(32) })),
+        getKeyById: vi.fn(() => Buffer.alloc(32)),
+        encryptWithActiveKey: vi.fn((data: Buffer) => {
+            const iv = Buffer.alloc(16);
+            const tag = Buffer.alloc(16);
+            return { encrypted: Buffer.concat([iv, tag, data]), keyId: 'test-key' };
+        }),
+        tryDecryptWithAllKeys: vi.fn((fullBuffer: Buffer) => {
+            const data = fullBuffer.subarray(32);
+            return { data, keyId: 'test-key' };
+        }),
+    },
+}));
+
 vi.mock('../../../config/index.js', () => ({
     security: { jwtSecret: 'test-secret-key-32-characters!!', encryptionKey: Buffer.alloc(32) },
     database: { type: 'mongodb', mongoUri: null, jsonPath: '' },
@@ -32,6 +48,11 @@ vi.mock('../../../core/database.js', () => ({
 const mockQueueAdd = vi.fn();
 vi.mock('../../../core/queueManager.js', () => ({
     default: { add: (fn: any) => mockQueueAdd(fn) },
+    TaskPriority: {
+        HIGH: 0,
+        NORMAL: 1,
+        LOW: 2,
+    },
 }));
 
 let channelIndex = 0;
@@ -71,6 +92,9 @@ describe('storageEngine', () => {
         mockRepository = {
             getFile: vi.fn(),
             saveFile: vi.fn(),
+            getChunkRegistry: vi.fn(),
+            getChunkRegistryByHash: vi.fn(),
+            saveChunkRegistry: vi.fn(),
         };
 
         mockGetRepository.mockReturnValue(mockRepository);
@@ -93,17 +117,24 @@ describe('storageEngine', () => {
 
             vi.mocked(fs.statSync).mockReturnValue({ size: testData.length } as any);
             vi.mocked(fs.createReadStream).mockReturnValue(Readable.from([testData]) as any);
+            mockRepository.getChunkRegistryByHash = vi.fn().mockResolvedValue(null);
 
             const fileId = await processUpload(mockClient as Client, '/test.txt', 'test.txt');
 
             expect(fileId).toBeDefined();
             expect(fileId).toHaveLength(8);
+            expect(mockRepository.saveChunkRegistry).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    refCount: 1,
+                    compressed: true,
+                }),
+            );
             expect(mockRepository.saveFile).toHaveBeenCalledWith(
                 expect.objectContaining({
                     id: fileId,
                     name: 'test.txt',
                     size: testData.length,
-                    compressed: true,
+                    chunkRegistryId: expect.any(String),
                 }),
             );
         });
@@ -113,15 +144,23 @@ describe('storageEngine', () => {
 
             vi.mocked(fs.statSync).mockReturnValue({ size: largeData.length } as any);
             vi.mocked(fs.createReadStream).mockReturnValue(Readable.from([largeData]) as any);
+            mockRepository.getChunkRegistryByHash = vi.fn().mockResolvedValue(null);
 
             const fileId = await processUpload(mockClient as Client, '/large.bin', 'large.bin');
 
             expect(fileId).toBeDefined();
+            expect(mockRepository.saveChunkRegistry).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    refCount: 1,
+                    compressed: true,
+                }),
+            );
             expect(mockRepository.saveFile).toHaveBeenCalledWith(
                 expect.objectContaining({
                     id: fileId,
                     name: 'large.bin',
                     size: largeData.length,
+                    chunkRegistryId: expect.any(String),
                 }),
             );
         });

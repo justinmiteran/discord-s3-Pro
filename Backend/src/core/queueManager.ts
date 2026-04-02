@@ -2,10 +2,18 @@ import logger from '../utils/logger.js';
 import { toError } from '../utils/errors/AppError.js';
 import { QUEUE } from '../constants/index.js';
 
+export enum TaskPriority {
+    HIGH = 0,      // User-facing operations (upload, download)
+    NORMAL = 1,    // Regular operations
+    LOW = 2,       // Background tasks (re-encryption)
+}
+
 interface QueueTask<T = any> {
     task: () => Promise<T>;
     resolve: (value: T | PromiseLike<T>) => void;
     reject: (reason?: any) => void;
+    priority: TaskPriority;
+    addedAt: number;
 }
 
 /**
@@ -21,20 +29,40 @@ class QueueManager {
     /**
      * Adds a new task to the execution queue
      * @param task - Async function to execute
+     * @param priority - Task priority (HIGH for user operations, LOW for background)
      * @returns Promise that resolves with the task result
      */
-    async add<T>(task: () => Promise<T>): Promise<T> {
+    async add<T>(task: () => Promise<T>, priority: TaskPriority = TaskPriority.NORMAL): Promise<T> {
         return new Promise((resolve, reject) => {
-            this.queue.push({ task, resolve, reject });
+            const queueTask: QueueTask<T> = {
+                task,
+                resolve,
+                reject,
+                priority,
+                addedAt: Date.now(),
+            };
+
+            this.queue.push(queueTask);
+
+            // Sort queue by priority (lower number = higher priority)
+            this.queue.sort((a, b) => {
+                if (a.priority !== b.priority) {
+                    return a.priority - b.priority;
+                }
+                // Same priority: FIFO (first in, first out)
+                return a.addedAt - b.addedAt;
+            });
 
             if (this.queue.length > 10) {
                 logger.warn('Queue size growing', {
                     queueSize: this.queue.length,
                     totalHandled: this.totalTasksHandled,
+                    priority: TaskPriority[priority],
                 });
             } else {
                 logger.debug('Task added to queue', {
                     queueSize: this.queue.length,
+                    priority: TaskPriority[priority],
                 });
             }
 

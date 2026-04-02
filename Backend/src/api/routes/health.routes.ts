@@ -10,7 +10,28 @@ export const createHealthRoutes = (client: Client): Router => {
     const router = Router();
 
     /**
-     * GET /status - Health check endpoint
+     * @openapi
+     * /status:
+     *   get:
+     *     tags:
+     *       - Health
+     *     summary: Check system health
+     *     description: Returns the current status of the API server and Discord bot connection
+     *     responses:
+     *       200:
+     *         description: System is operational
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 status:
+     *                   type: string
+     *                   example: online
+     *                 bot:
+     *                   type: string
+     *                   description: Discord bot username
+     *                   example: StorageBot#1234
      */
     router.get('/status', (req: Request, res: Response) => {
         res.json({ status: 'online', bot: client.user?.tag || 'Ready' });

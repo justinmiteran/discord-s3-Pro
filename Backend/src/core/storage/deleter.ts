@@ -6,7 +6,8 @@ import { DISCORD_ERROR_CODES } from '../../constants/index.js';
 import { NotFoundError, toError } from '../../utils/errors/AppError.js';
 
 /**
- * Deletes a file completely from Discord and the registry
+ * Deletes a file from the registry
+ * Decrements chunk registry refCount and deletes chunks from Discord if refCount reaches 0
  * @param client - Discord bot client instance
  * @param fileId - Unique identifier of the file to delete
  * @returns The name of the deleted file
@@ -22,62 +23,92 @@ export const deleteFile = async (client: Client, fileId: string): Promise<string
         throw new NotFoundError('File');
     }
 
+    const registry = await repo.getChunkRegistry(file.chunkRegistryId);
+    if (!registry) {
+        logger.error('Chunk registry not found for deletion', undefined, {
+            fileId,
+            chunkRegistryId: file.chunkRegistryId,
+        });
+        throw new NotFoundError('Chunk registry');
+    }
+
     logger.info('Starting file deletion', {
         fileId,
         fileName: file.name,
-        chunks: file.chunks.length,
+        registryId: registry.id,
+        currentRefCount: registry.refCount,
     });
 
-    let deletedChunks = 0;
-    let failedChunks = 0;
+    await repo.deleteFile(fileId);
+    const newRefCount = await repo.decrementChunkRegistryRefCount(registry.id);
 
-    for (const chunk of file.chunks) {
-        await queue.add(async () => {
-            try {
-                const channel = (await client.channels.fetch(chunk.cId)) as TextChannel;
-                if (!channel) {
-                    logger.warn('Channel not found for chunk deletion', {
-                        channelId: chunk.cId,
-                        messageId: chunk.mId,
-                    });
-                    failedChunks++;
-                    return;
-                }
+    if (newRefCount === 0) {
+        logger.info('Deleting Discord chunks (last reference)', {
+            registryId: registry.id,
+            chunks: registry.chunks.length,
+        });
 
-                const msg = await channel.messages.fetch(chunk.mId);
-                await msg.delete();
-                deletedChunks++;
+        let deletedChunks = 0;
+        let failedChunks = 0;
 
-                logger.debug('Chunk deleted', {
-                    messageId: chunk.mId,
-                    channelId: chunk.cId,
-                    progress: `${deletedChunks}/${file.chunks.length}`,
-                });
-            } catch (err) {
-                const error = toError(err);
-                if ((err as any).code === DISCORD_ERROR_CODES.MESSAGE_NOT_FOUND) {
-                    logger.debug('Chunk already deleted', { messageId: chunk.mId });
+        for (const chunk of registry.chunks) {
+            await queue.add(async () => {
+                try {
+                    const channel = (await client.channels.fetch(chunk.cId)) as TextChannel;
+                    if (!channel) {
+                        logger.warn('Channel not found for chunk deletion', {
+                            channelId: chunk.cId,
+                            messageId: chunk.mId,
+                        });
+                        failedChunks++;
+                        return;
+                    }
+
+                    const msg = await channel.messages.fetch(chunk.mId);
+                    await msg.delete();
                     deletedChunks++;
-                } else {
-                    logger.warn('Chunk deletion failed', {
+
+                    logger.debug('Chunk deleted', {
                         messageId: chunk.mId,
-                        error: error.message,
+                        channelId: chunk.cId,
+                        progress: `${deletedChunks}/${registry.chunks.length}`,
                     });
-                    failedChunks++;
+                } catch (err) {
+                    const error = toError(err);
+                    if ((err as any).code === DISCORD_ERROR_CODES.MESSAGE_NOT_FOUND) {
+                        logger.debug('Chunk already deleted', { messageId: chunk.mId });
+                        deletedChunks++;
+                    } else {
+                        logger.warn('Chunk deletion failed', {
+                            messageId: chunk.mId,
+                            error: error.message,
+                        });
+                        failedChunks++;
+                    }
                 }
-            }
+            });
+        }
+
+        logger.info('Discord chunks deletion completed', {
+            deletedChunks,
+            failedChunks,
+            totalChunks: registry.chunks.length,
+        });
+
+        await repo.deleteChunkRegistry(registry.id);
+        logger.debug('Chunk registry deleted', { registryId: registry.id });
+    } else {
+        logger.info('Chunk registry retained (other files reference it)', {
+            registryId: registry.id,
+            remainingRefs: newRefCount,
         });
     }
-
-    await repo.deleteFile(fileId);
 
     const duration = Date.now() - startTime;
     logger.success('File deletion completed', {
         fileId,
         fileName: file.name,
-        deletedChunks,
-        failedChunks,
-        totalChunks: file.chunks.length,
+        chunksDeleted: newRefCount === 0,
         duration,
     });
 

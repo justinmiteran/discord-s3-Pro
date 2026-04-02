@@ -245,4 +245,332 @@ describe('jsonRepository', () => {
             await expect(repository.deleteFile('nonexistent')).resolves.not.toThrow();
         });
     });
+
+    describe('getChunkRegistryByHash', () => {
+        it('retrieves chunk registry by hash from JSON registry', async () => {
+            const mockStore = {
+                files: {},
+                chunkRegistry: {
+                    reg1: { hash: 'abc123', chunks: [], refCount: 1, compressed: true, createdAt: '2024-01-01' },
+                    reg2: { hash: 'def456', chunks: [], refCount: 1, compressed: true, createdAt: '2024-01-01' },
+                },
+            };
+
+            vi.mocked(fs.existsSync).mockReturnValue(true);
+            vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(mockStore));
+
+            const registry = await repository.getChunkRegistryByHash('abc123');
+
+            expect(registry).toEqual(
+                expect.objectContaining({
+                    id: 'reg1',
+                    hash: 'abc123',
+                }),
+            );
+        });
+
+        it('returns null when hash not found', async () => {
+            const mockStore = {
+                files: {},
+                chunkRegistry: {
+                    reg1: { hash: 'abc123', chunks: [], refCount: 1, compressed: true, createdAt: '2024-01-01' },
+                },
+            };
+
+            vi.mocked(fs.existsSync).mockReturnValue(true);
+            vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(mockStore));
+
+            const registry = await repository.getChunkRegistryByHash('nonexistent-hash');
+
+            expect(registry).toBeNull();
+        });
+    });
+
+    describe('incrementChunkRegistryRefCount', () => {
+        it('increments refCount for existing chunk registry', async () => {
+            const mockStore = {
+                files: {},
+                chunkRegistry: {
+                    reg123: { hash: 'abc123', chunks: [], refCount: 1, compressed: true, createdAt: '2024-01-01' },
+                },
+            };
+
+            vi.mocked(fs.existsSync).mockReturnValue(true);
+            vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(mockStore));
+
+            await repository.incrementChunkRegistryRefCount('reg123');
+
+            expect(fs.writeFileSync).toHaveBeenCalledWith(
+                './data/test-registry.json',
+                expect.stringContaining('"refCount": 2'),
+            );
+        });
+
+        it('initializes refCount to 2 when undefined', async () => {
+            const mockStore = {
+                files: {},
+                chunkRegistry: {
+                    reg123: { hash: 'abc123', chunks: [], compressed: true, createdAt: '2024-01-01' },
+                },
+            };
+
+            vi.mocked(fs.existsSync).mockReturnValue(true);
+            vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(mockStore));
+
+            await repository.incrementChunkRegistryRefCount('reg123');
+
+            expect(fs.writeFileSync).toHaveBeenCalledWith(
+                './data/test-registry.json',
+                expect.stringContaining('"refCount": 2'),
+            );
+        });
+
+        it('throws error when registry not found', async () => {
+            vi.mocked(fs.existsSync).mockReturnValue(true);
+            vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ files: {}, chunkRegistry: {} }));
+
+            await expect(repository.incrementChunkRegistryRefCount('nonexistent')).rejects.toThrow(
+                'Chunk registry nonexistent not found',
+            );
+        });
+    });
+
+    describe('decrementChunkRegistryRefCount', () => {
+        it('decrements refCount for existing chunk registry', async () => {
+            const mockStore = {
+                files: {},
+                chunkRegistry: {
+                    reg123: { hash: 'abc123', chunks: [], refCount: 2, compressed: true, createdAt: '2024-01-01' },
+                },
+            };
+
+            vi.mocked(fs.existsSync).mockReturnValue(true);
+            vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(mockStore));
+
+            const newRefCount = await repository.decrementChunkRegistryRefCount('reg123');
+
+            expect(newRefCount).toBe(1);
+            expect(fs.writeFileSync).toHaveBeenCalledWith(
+                './data/test-registry.json',
+                expect.stringContaining('"refCount": 1'),
+            );
+        });
+
+        it('does not go below 0', async () => {
+            const mockStore = {
+                files: {},
+                chunkRegistry: {
+                    reg123: { hash: 'abc123', chunks: [], refCount: 0, compressed: true, createdAt: '2024-01-01' },
+                },
+            };
+
+            vi.mocked(fs.existsSync).mockReturnValue(true);
+            vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(mockStore));
+
+            const newRefCount = await repository.decrementChunkRegistryRefCount('reg123');
+
+            expect(newRefCount).toBe(0);
+        });
+
+        it('throws error when registry not found', async () => {
+            vi.mocked(fs.existsSync).mockReturnValue(true);
+            vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ files: {}, chunkRegistry: {} }));
+
+            await expect(repository.decrementChunkRegistryRefCount('nonexistent')).rejects.toThrow(
+                'Chunk registry nonexistent not found',
+            );
+        });
+    });
+
+    describe('saveChunkRegistry', () => {
+        it('saves chunk registry to JSON', async () => {
+            const mockStore = {
+                files: {},
+                chunkRegistry: {},
+            };
+
+            vi.mocked(fs.existsSync).mockReturnValue(true);
+            vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(mockStore));
+
+            const registry = {
+                id: 'reg123',
+                hash: 'abc123',
+                chunks: [{ mId: 'msg1', cId: 'ch1' }],
+                refCount: 1,
+                compressed: true,
+                createdAt: new Date().toISOString(),
+            };
+
+            await repository.saveChunkRegistry(registry);
+
+            expect(fs.writeFileSync).toHaveBeenCalledWith(
+                './data/test-registry.json',
+                expect.stringContaining('reg123'),
+            );
+        });
+
+        it('throws error when write fails', async () => {
+            const mockStore = {
+                files: {},
+                chunkRegistry: {},
+            };
+
+            vi.mocked(fs.existsSync).mockReturnValue(true);
+            vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(mockStore));
+            vi.mocked(fs.writeFileSync).mockImplementation(() => {
+                throw new Error('ENOSPC: no space left on device');
+            });
+
+            const registry = {
+                id: 'reg123',
+                hash: 'abc123',
+                chunks: [],
+                refCount: 1,
+                compressed: true,
+                createdAt: new Date().toISOString(),
+            };
+
+            await expect(repository.saveChunkRegistry(registry)).rejects.toThrow('ENOSPC');
+        });
+    });
+
+    describe('updateChunkRegistryData', () => {
+        it('updates chunk registry data in JSON', async () => {
+            const mockStore = {
+                files: {},
+                chunkRegistry: {
+                    reg123: { hash: 'abc123', chunks: [{ mId: 'old', cId: 'old' }], refCount: 2, compressed: true, encryptionKeyId: 'v1', createdAt: '2024-01-01' },
+                },
+            };
+
+            vi.mocked(fs.existsSync).mockReturnValue(true);
+            vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(mockStore));
+
+            const newChunks = [{ mId: 'new-msg1', cId: 'new-ch1' }];
+            await repository.updateChunkRegistryData('reg123', newChunks, 'v2');
+
+            expect(fs.writeFileSync).toHaveBeenCalledWith(
+                './data/test-registry.json',
+                expect.stringContaining('new-msg1'),
+            );
+            expect(fs.writeFileSync).toHaveBeenCalledWith(
+                './data/test-registry.json',
+                expect.stringContaining('"refCount": 2'),
+            );
+        });
+
+        it('throws error when registry not found', async () => {
+            const mockStore = {
+                files: {},
+                chunkRegistry: {},
+            };
+
+            vi.mocked(fs.existsSync).mockReturnValue(true);
+            vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(mockStore));
+
+            const chunks = [{ mId: 'new-msg1', cId: 'new-ch1' }];
+            await expect(
+                repository.updateChunkRegistryData('nonexistent', chunks, 'v2'),
+            ).rejects.toThrow('Chunk registry nonexistent not found');
+        });
+    });
+
+    describe('getChunkRegistry', () => {
+        it('retrieves chunk registry from JSON', async () => {
+            const mockStore = {
+                files: {},
+                chunkRegistry: {
+                    reg123: { hash: 'abc123', chunks: [], refCount: 1, compressed: true, createdAt: '2024-01-01' },
+                },
+            };
+
+            vi.mocked(fs.existsSync).mockReturnValue(true);
+            vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(mockStore));
+
+            const registry = await repository.getChunkRegistry('reg123');
+
+            expect(registry).toEqual(
+                expect.objectContaining({
+                    id: 'reg123',
+                    hash: 'abc123',
+                }),
+            );
+        });
+
+        it('returns null when registry not found', async () => {
+            const mockStore = {
+                files: {},
+                chunkRegistry: {},
+            };
+
+            vi.mocked(fs.existsSync).mockReturnValue(true);
+            vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(mockStore));
+
+            const registry = await repository.getChunkRegistry('nonexistent');
+
+            expect(registry).toBeNull();
+        });
+
+        it('handles corrupted JSON by returning null', async () => {
+            vi.mocked(fs.existsSync).mockReturnValue(true);
+            vi.mocked(fs.readFileSync).mockReturnValue('corrupted');
+
+            const registry = await repository.getChunkRegistry('reg123');
+
+            expect(registry).toBeNull();
+        });
+    });
+
+    describe('deleteChunkRegistry', () => {
+        it('deletes chunk registry from JSON', async () => {
+            const mockStore = {
+                files: {},
+                chunkRegistry: {
+                    reg123: { hash: 'abc123', chunks: [], refCount: 1, compressed: true, createdAt: '2024-01-01' },
+                    reg456: { hash: 'def456', chunks: [], refCount: 1, compressed: true, createdAt: '2024-01-01' },
+                },
+            };
+
+            vi.mocked(fs.existsSync).mockReturnValue(true);
+            vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(mockStore));
+
+            await repository.deleteChunkRegistry('reg123');
+
+            expect(fs.writeFileSync).toHaveBeenCalledWith(
+                './data/test-registry.json',
+                expect.not.stringContaining('reg123'),
+            );
+        });
+
+        it('does not fail when deleting non-existent registry', async () => {
+            const mockStore = {
+                files: {},
+                chunkRegistry: {
+                    reg456: { hash: 'def456', chunks: [], refCount: 1, compressed: true, createdAt: '2024-01-01' },
+                },
+            };
+
+            vi.mocked(fs.existsSync).mockReturnValue(true);
+            vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(mockStore));
+
+            await expect(repository.deleteChunkRegistry('nonexistent')).resolves.not.toThrow();
+        });
+
+        it('throws error when write fails during delete', async () => {
+            const mockStore = {
+                files: {},
+                chunkRegistry: {
+                    reg123: { hash: 'abc123', chunks: [], refCount: 1, compressed: true, createdAt: '2024-01-01' },
+                },
+            };
+
+            vi.mocked(fs.existsSync).mockReturnValue(true);
+            vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(mockStore));
+            vi.mocked(fs.writeFileSync).mockImplementation(() => {
+                throw new Error('ENOSPC: no space left on device');
+            });
+
+            await expect(repository.deleteChunkRegistry('reg123')).rejects.toThrow('ENOSPC');
+        });
+    });
 });

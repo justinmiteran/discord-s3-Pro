@@ -7,21 +7,23 @@ import { Response } from 'express';
 import { server } from '../../config/index.js';
 import { encryptBuffer, decryptBuffer } from '../../pipeline/encryptStream.js';
 import { ChunkSplitter } from '../../pipeline/chunker.js';
-import queue from '../queueManager.js';
+import queue, { TaskPriority } from '../queueManager.js';
 import pool from '../discord/channelPool.js';
 import * as hasher from '../../utils/hasher.js';
 import { getRepository } from '../database.js';
-import { FileData, ChunkMetadata } from '../../types/models/file.model.js';
+import { FileData, ChunkMetadata, ChunkRegistry } from '../../types/models/file.model.js';
 import logger from '../../utils/logger.js';
 import { pipeline, Writable } from 'stream';
 import { promisify } from 'util';
 import { ERROR_CODES } from '../../constants/index.js';
-import { NotFoundError, DiscordError, toError } from '../../utils/errors/AppError.js';
+import { NotFoundError, DiscordError, FileTooLargeError, toError } from '../../utils/errors/AppError.js';
+import { lazyReencryptionService } from '../reencryption/lazyReencryption.js';
 
 const pipelinePromise = promisify(pipeline);
 
 /**
  * Processes file upload: compression, encryption, chunking, and storage to Discord
+ * Implements deduplication: if file hash exists in chunk registry, reuses existing chunks
  * @param client - Discord bot client instance
  * @param filePath - Path to the file to upload
  * @param originalName - Original filename
@@ -35,6 +37,18 @@ export const processUpload = async (
     const startTime = Date.now();
     const stats = fs.statSync(filePath);
 
+    // Validate file size
+    if (server.maxFileSize > 0 && stats.size > server.maxFileSize) {
+        logger.warn('File size exceeds maximum allowed', {
+            fileName: originalName,
+            fileSize: stats.size,
+            maxSize: server.maxFileSize,
+            fileSizeMB: (stats.size / 1024 / 1024).toFixed(2),
+            maxSizeMB: (server.maxFileSize / 1024 / 1024).toFixed(2),
+        });
+        throw new FileTooLargeError(stats.size, server.maxFileSize);
+    }
+
     logger.info('Starting file upload', {
         fileName: originalName,
         size: stats.size,
@@ -44,7 +58,69 @@ export const processUpload = async (
     const fileHash = await hasher.calculateHash(filePath);
     logger.debug('File hash calculated', { hash: fileHash });
 
+    const repo = getRepository();
+    const existingRegistry = await repo.getChunkRegistryByHash(fileHash);
+
+    if (existingRegistry) {
+        logger.info('File already exists in chunk registry (deduplication)', {
+            hash: fileHash,
+            registryId: existingRegistry.id,
+            currentRefCount: existingRegistry.refCount,
+            encryptionKeyId: existingRegistry.encryptionKeyId,
+        });
+
+        // Check if re-encryption is needed and trigger in background
+        if (lazyReencryptionService.needsReencryption(existingRegistry)) {
+            logger.info('Existing registry needs re-encryption, scheduling background re-encryption', {
+                registryId: existingRegistry.id,
+                oldKeyId: existingRegistry.encryptionKeyId || 'unknown',
+            });
+
+            // Trigger re-encryption in background without blocking upload
+            lazyReencryptionService.reencryptRegistry(client, existingRegistry, 'dedup-upload')
+                .then((registryId) => {
+                    logger.success('Background re-encryption completed for deduplicated file', {
+                        registryId,
+                        hash: fileHash,
+                    });
+                })
+                .catch((err) => {
+                    logger.warn('Background re-encryption failed for deduplicated file', {
+                        error: toError(err),
+                        registryId: existingRegistry.id,
+                        hash: fileHash,
+                    });
+                });
+        }
+
+        const fileId = crypto.randomBytes(4).toString('hex');
+        const fileData: FileData = {
+            id: fileId,
+            name: originalName,
+            hash: fileHash,
+            chunkRegistryId: existingRegistry.id,
+            size: stats.size,
+            uploadedAt: new Date().toISOString(),
+        };
+
+        await repo.saveFile(fileData);
+        await repo.incrementChunkRegistryRefCount(existingRegistry.id);
+
+        const duration = Date.now() - startTime;
+        logger.success('File upload completed (deduplicated)', {
+            fileId,
+            fileName: originalName,
+            registryId: existingRegistry.id,
+            reusedChunks: existingRegistry.chunks.length,
+            duration,
+            hash: fileHash,
+        });
+
+        return fileId;
+    }
+
     const chunksMetadata: ChunkMetadata[] = [];
+    let encryptionKeyId: string | undefined;
 
     const splitter = new ChunkSplitter(server.chunkSize);
     const readStream = fs.createReadStream(filePath);
@@ -59,7 +135,8 @@ export const processUpload = async (
                 chunkSequence++;
                 const currentChunkIndex = chunkSequence;
 
-                const encrypted = encryptBuffer(chunk);
+                const { encrypted, keyId } = encryptBuffer(chunk);
+                encryptionKeyId = keyId;
                 const channelId = pool.next();
 
                 const result = await queue.add(async () => {
@@ -68,10 +145,9 @@ export const processUpload = async (
                         name: `chunk_${currentChunkIndex}.dat`,
                     });
                     return await channel.send({
-                        content: `**File:** ${originalName} | **Part:** ${currentChunkIndex}`,
                         files: [attachment],
                     });
-                });
+                }, TaskPriority.HIGH);
 
                 logger.debug('Chunk uploaded', {
                     chunkIndex: currentChunkIndex,
@@ -95,23 +171,36 @@ export const processUpload = async (
     try {
         await pipelinePromise(readStream, compressor, splitter, uploadDestination);
 
+        const registryId = crypto.randomBytes(4).toString('hex');
+        const chunkRegistry: ChunkRegistry = {
+            id: registryId,
+            hash: fileHash,
+            chunks: chunksMetadata,
+            refCount: 1,
+            compressed: true,
+            encryptionKeyId,
+            createdAt: new Date().toISOString(),
+        };
+
+        await repo.saveChunkRegistry(chunkRegistry);
+
         const fileId = crypto.randomBytes(4).toString('hex');
         const fileData: FileData = {
             id: fileId,
             name: originalName,
             hash: fileHash,
-            chunks: chunksMetadata,
+            chunkRegistryId: registryId,
             size: stats.size,
-            compressed: true,
             uploadedAt: new Date().toISOString(),
         };
 
-        await getRepository().saveFile(fileData);
+        await repo.saveFile(fileData);
 
         const duration = Date.now() - startTime;
         logger.success('File upload completed', {
             fileId,
             fileName: originalName,
+            registryId,
             chunks: chunksMetadata.length,
             size: stats.size,
             duration,
@@ -132,6 +221,7 @@ export const processUpload = async (
 
 /**
  * Downloads and reconstructs a file from Discord chunks
+ * Retrieves chunks from the chunk registry referenced by the file
  * @param client - Discord bot client instance
  * @param fileId - Unique file identifier
  * @param res - Express response object to stream the file to
@@ -149,13 +239,49 @@ export const downloadFile = async (
         throw new NotFoundError('File');
     }
 
+    let registry = await getRepository().getChunkRegistry(file.chunkRegistryId);
+    if (!registry) {
+        const error = new NotFoundError('Chunk registry');
+        logger.error('Chunk registry not found for download', error, {
+            fileId,
+            chunkRegistryId: file.chunkRegistryId,
+        });
+        throw error;
+    }
+
     logger.info('Starting file download', {
         fileId,
         fileName: file.name,
-        chunks: file.chunks.length,
+        registryId: registry.id,
+        chunks: registry.chunks.length,
         size: file.size,
         sizeFormatted: `${(file.size / 1024 / 1024).toFixed(2)} MB`,
+        encryptionKeyId: registry.encryptionKeyId,
     });
+
+    // Check if re-encryption is needed and trigger in background
+    if (lazyReencryptionService.needsReencryption(registry)) {
+        logger.info('Registry needs re-encryption, scheduling background re-encryption', {
+            registryId: registry.id,
+            oldKeyId: registry.encryptionKeyId || 'unknown',
+        });
+
+        // Trigger re-encryption in background without blocking download
+        lazyReencryptionService.reencryptRegistry(client, registry, fileId)
+            .then((registryId) => {
+                logger.success('Background re-encryption completed', {
+                    registryId,
+                    fileId,
+                });
+            })
+            .catch((err) => {
+                logger.warn('Background re-encryption failed', {
+                    error: toError(err),
+                    registryId: registry.id,
+                    fileId,
+                });
+            });
+    }
 
     res.setHeader('Content-Disposition', `attachment; filename="${file.name}"`);
     res.setHeader('Content-Type', 'application/octet-stream');
@@ -173,13 +299,13 @@ export const downloadFile = async (
         let downloadedChunks = 0;
         let totalBytes = 0;
 
-        for (const chunk of file.chunks) {
+        for (const chunk of registry.chunks) {
             downloadedChunks++;
 
             const msg = await queue.add(async () => {
                 const channel = (await client.channels.fetch(chunk.cId)) as TextChannel;
                 return await channel.messages.fetch(chunk.mId);
-            });
+            }, TaskPriority.HIGH);
 
             const attachment = msg.attachments.first();
             if (!attachment) {
@@ -196,14 +322,14 @@ export const downloadFile = async (
             }
 
             const { data } = await axios.get(attachment.url, { responseType: 'arraybuffer' });
-            const decrypted = decryptBuffer(Buffer.from(data));
+            const { decrypted } = decryptBuffer(Buffer.from(data), registry.encryptionKeyId);
             totalBytes += decrypted.length;
 
             logger.debug('Chunk recovered', {
                 chunkIndex: downloadedChunks,
-                totalChunks: file.chunks.length,
+                totalChunks: registry.chunks.length,
                 chunkSize: `${(decrypted.length / 1024 / 1024).toFixed(2)} MB`,
-                progress: `${((downloadedChunks / file.chunks.length) * 100).toFixed(1)}%`,
+                progress: `${((downloadedChunks / registry.chunks.length) * 100).toFixed(1)}%`,
             });
 
             const canContinue = gunzip.write(decrypted);

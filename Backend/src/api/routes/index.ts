@@ -3,6 +3,7 @@ import { Client } from 'discord.js';
 import { createHealthRoutes } from './health.routes.js';
 import { createFileRoutes } from './file.routes.js';
 import { createAuthRoutes } from './auth.routes.js';
+import { createKeyRotationRoutes } from './keyRotation.routes.js';
 import { authMiddleware } from '../middlewares/authMiddleware.js';
 import { authLimiter, uploadLimiter } from '../middlewares/rateLimiter.js';
 
@@ -16,6 +17,7 @@ export const createRoutes = (client: Client): Router => {
     router.use('/', createAuthRoutes());
     router.use('/', createHealthRoutes(client));
     router.use('/', authMiddleware, createFileRoutes(client));
+    router.use('/', authMiddleware, createKeyRotationRoutes());
 
     return router;
 };

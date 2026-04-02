@@ -8,6 +8,13 @@ import { Client } from 'discord.js';
  * Tests real HTTP endpoints with mocked external dependencies (Discord, MongoDB)
  */
 
+vi.mock('../../core/keyRotation.js', () => ({
+    keyRotationManager: {
+        getActiveKey: vi.fn(() => ({ id: 'test-key', key: Buffer.alloc(32) })),
+        getKeyById: vi.fn(() => Buffer.alloc(32)),
+    },
+}));
+
 const mockClient = {
     user: { tag: 'TestBot#1234', id: '123456789' } as any,
     channels: {
@@ -20,6 +27,7 @@ const mockRepository = {
     disconnect: vi.fn(),
     listFiles: vi.fn().mockResolvedValue([]),
     getFile: vi.fn(),
+    getChunkRegistry: vi.fn(),
     saveFile: vi.fn(),
     deleteFile: vi.fn(),
 };
@@ -97,12 +105,20 @@ describe('E2E: Full Application Stack', () => {
                     name: 'test.txt',
                     size: 1024,
                     hash: 'hash1',
-                    chunks: [],
-                    compressed: true,
+                    chunkRegistryId: 'reg1',
                     uploadedAt: new Date().toISOString(),
                 },
             ];
+            const mockRegistry = {
+                id: 'reg1',
+                hash: 'hash1',
+                chunks: [],
+                refCount: 1,
+                compressed: true,
+                createdAt: new Date().toISOString(),
+            };
             mockRepository.listFiles.mockResolvedValue(mockFiles);
+            mockRepository.getChunkRegistry.mockResolvedValue(mockRegistry);
 
             const res = await request(app).get('/list');
 

@@ -1,4 +1,4 @@
-import { FileData } from '../models/file.model.js';
+import { FileData, ChunkRegistry } from '../models/file.model.js';
 
 /**
  * Data Transfer Object for file information
@@ -11,20 +11,29 @@ export default class FileDTO {
     public date: string;
     public chunkCount: number;
 
-    constructor(file: FileData) {
+    constructor(file: FileData, registry?: ChunkRegistry) {
         this.id = file.id;
         this.name = file.name;
         this.size = file.size;
         this.date = file.uploadedAt;
-        this.chunkCount = file.chunks.length;
+        this.chunkCount = registry?.chunks.length || 0;
     }
 
     /**
      * Converts an array of FileData to FileDTO array
      * @param files - Array of file metadata
+     * @param getRegistry - Function to retrieve chunk registry
      * @returns Array of DTOs
      */
-    static fromList(files: FileData[]): FileDTO[] {
-        return files.map((file) => new FileDTO(file));
+    static async fromList(
+        files: FileData[],
+        getRegistry: (registryId: string) => Promise<ChunkRegistry | null>,
+    ): Promise<FileDTO[]> {
+        const dtos: FileDTO[] = [];
+        for (const file of files) {
+            const registry = await getRegistry(file.chunkRegistryId);
+            dtos.push(new FileDTO(file, registry || undefined));
+        }
+        return dtos;
     }
 }

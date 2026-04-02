@@ -1,5 +1,5 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
-import { Client, TextChannel, Message, Collection } from 'discord.js';
+import { Client, TextChannel, Message } from 'discord.js';
 
 vi.mock('../../../config/index.js', () => ({
     security: { jwtSecret: 'test-secret-key-32-characters!!', encryptionKey: Buffer.alloc(32) },
@@ -67,7 +67,10 @@ describe('deleter', () => {
 
         mockRepository = {
             getFile: vi.fn(),
+            getChunkRegistry: vi.fn(),
             deleteFile: vi.fn().mockResolvedValue(undefined),
+            deleteChunkRegistry: vi.fn().mockResolvedValue(undefined),
+            decrementChunkRegistryRefCount: vi.fn(),
         };
 
         mockGetRepository.mockReturnValue(mockRepository);
@@ -91,35 +94,77 @@ describe('deleter', () => {
             );
         });
 
-        it('deletes file with all chunks successfully', async () => {
+        it('deletes file with all chunks successfully when refCount is 0', async () => {
             const mockFile = {
                 id: 'file123',
                 name: 'test.txt',
+                hash: 'abc123',
+                chunkRegistryId: 'reg123',
+                size: 1024,
+                uploadedAt: new Date().toISOString(),
+            };
+
+            const mockRegistry = {
+                id: 'reg123',
+                hash: 'abc123',
                 chunks: [
                     { mId: 'msg1', cId: 'ch1' },
                     { mId: 'msg2', cId: 'ch2' },
                 ],
-                hash: 'abc123',
-                size: 1024,
+                refCount: 1,
                 compressed: true,
-                uploadedAt: new Date().toISOString(),
+                createdAt: new Date().toISOString(),
             };
 
             mockRepository.getFile.mockResolvedValue(mockFile);
+            mockRepository.getChunkRegistry.mockResolvedValue(mockRegistry);
+            mockRepository.decrementChunkRegistryRefCount.mockResolvedValue(0);
 
             const fileName = await deleteFile(mockClient as Client, 'file123');
 
             expect(fileName).toBe('test.txt');
             expect(mockMessage.delete).toHaveBeenCalledTimes(2);
             expect(mockRepository.deleteFile).toHaveBeenCalledWith('file123');
-            expect(logger.success).toHaveBeenCalledWith(
-                'File deletion completed',
+            expect(mockRepository.deleteChunkRegistry).toHaveBeenCalledWith('reg123');
+        });
+
+        it('skips Discord chunk deletion when refCount > 0', async () => {
+            const mockFile = {
+                id: 'file123',
+                name: 'duplicate.txt',
+                hash: 'abc123',
+                chunkRegistryId: 'reg123',
+                size: 1024,
+                uploadedAt: new Date().toISOString(),
+            };
+
+            const mockRegistry = {
+                id: 'reg123',
+                hash: 'abc123',
+                chunks: [
+                    { mId: 'msg1', cId: 'ch1' },
+                    { mId: 'msg2', cId: 'ch2' },
+                ],
+                refCount: 3,
+                compressed: true,
+                createdAt: new Date().toISOString(),
+            };
+
+            mockRepository.getFile.mockResolvedValue(mockFile);
+            mockRepository.getChunkRegistry.mockResolvedValue(mockRegistry);
+            mockRepository.decrementChunkRegistryRefCount.mockResolvedValue(2);
+
+            const fileName = await deleteFile(mockClient as Client, 'file123');
+
+            expect(fileName).toBe('duplicate.txt');
+            expect(mockMessage.delete).not.toHaveBeenCalled();
+            expect(mockRepository.deleteFile).toHaveBeenCalledWith('file123');
+            expect(mockRepository.deleteChunkRegistry).not.toHaveBeenCalled();
+            expect(logger.info).toHaveBeenCalledWith(
+                'Chunk registry retained (other files reference it)',
                 expect.objectContaining({
-                    fileId: 'file123',
-                    fileName: 'test.txt',
-                    deletedChunks: 2,
-                    failedChunks: 0,
-                    totalChunks: 2,
+                    registryId: 'reg123',
+                    remainingRefs: 2,
                 }),
             );
         });
@@ -128,48 +173,54 @@ describe('deleter', () => {
             const mockFile = {
                 id: 'file123',
                 name: 'test.txt',
-                chunks: [{ mId: 'msg1', cId: 'invalid-channel' }],
                 hash: 'abc123',
+                chunkRegistryId: 'reg123',
                 size: 1024,
-                compressed: true,
                 uploadedAt: new Date().toISOString(),
             };
 
+            const mockRegistry = {
+                id: 'reg123',
+                hash: 'abc123',
+                chunks: [{ mId: 'msg1', cId: 'invalid-channel' }],
+                refCount: 1,
+                compressed: true,
+                createdAt: new Date().toISOString(),
+            };
+
             mockRepository.getFile.mockResolvedValue(mockFile);
+            mockRepository.getChunkRegistry.mockResolvedValue(mockRegistry);
+            mockRepository.decrementChunkRegistryRefCount.mockResolvedValue(0);
             vi.mocked(mockClient.channels!.fetch as any).mockResolvedValue(null);
 
             const fileName = await deleteFile(mockClient as Client, 'file123');
 
             expect(fileName).toBe('test.txt');
             expect(mockRepository.deleteFile).toHaveBeenCalledWith('file123');
-            expect(logger.warn).toHaveBeenCalledWith(
-                'Channel not found for chunk deletion',
-                expect.objectContaining({
-                    channelId: 'invalid-channel',
-                    messageId: 'msg1',
-                }),
-            );
-            expect(logger.success).toHaveBeenCalledWith(
-                'File deletion completed',
-                expect.objectContaining({
-                    deletedChunks: 0,
-                    failedChunks: 1,
-                }),
-            );
         });
 
         it('handles message already deleted (Discord error 10008)', async () => {
             const mockFile = {
                 id: 'file123',
                 name: 'test.txt',
-                chunks: [{ mId: 'msg1', cId: 'ch1' }],
                 hash: 'abc123',
+                chunkRegistryId: 'reg123',
                 size: 1024,
-                compressed: true,
                 uploadedAt: new Date().toISOString(),
             };
 
+            const mockRegistry = {
+                id: 'reg123',
+                hash: 'abc123',
+                chunks: [{ mId: 'msg1', cId: 'ch1' }],
+                refCount: 1,
+                compressed: true,
+                createdAt: new Date().toISOString(),
+            };
+
             mockRepository.getFile.mockResolvedValue(mockFile);
+            mockRepository.getChunkRegistry.mockResolvedValue(mockRegistry);
+            mockRepository.decrementChunkRegistryRefCount.mockResolvedValue(0);
 
             const discordError = new Error('Unknown Message');
             (discordError as any).code = DISCORD_ERROR_CODES.MESSAGE_NOT_FOUND;
@@ -179,35 +230,34 @@ describe('deleter', () => {
 
             expect(fileName).toBe('test.txt');
             expect(mockRepository.deleteFile).toHaveBeenCalledWith('file123');
-            expect(logger.debug).toHaveBeenCalledWith(
-                'Chunk already deleted',
-                expect.objectContaining({ messageId: 'msg1' }),
-            );
-            expect(logger.success).toHaveBeenCalledWith(
-                'File deletion completed',
-                expect.objectContaining({
-                    deletedChunks: 1,
-                    failedChunks: 0,
-                }),
-            );
         });
 
         it('handles partial deletion failure', async () => {
             const mockFile = {
                 id: 'file123',
                 name: 'test.txt',
+                hash: 'abc123',
+                chunkRegistryId: 'reg123',
+                size: 1024,
+                uploadedAt: new Date().toISOString(),
+            };
+
+            const mockRegistry = {
+                id: 'reg123',
+                hash: 'abc123',
                 chunks: [
                     { mId: 'msg1', cId: 'ch1' },
                     { mId: 'msg2', cId: 'ch2' },
                     { mId: 'msg3', cId: 'ch1' },
                 ],
-                hash: 'abc123',
-                size: 1024,
+                refCount: 1,
                 compressed: true,
-                uploadedAt: new Date().toISOString(),
+                createdAt: new Date().toISOString(),
             };
 
             mockRepository.getFile.mockResolvedValue(mockFile);
+            mockRepository.getChunkRegistry.mockResolvedValue(mockRegistry);
+            mockRepository.decrementChunkRegistryRefCount.mockResolvedValue(0);
 
             let callCount = 0;
             vi.mocked(mockChannel.messages!.fetch as any).mockImplementation(() => {
@@ -222,38 +272,33 @@ describe('deleter', () => {
 
             expect(fileName).toBe('test.txt');
             expect(mockRepository.deleteFile).toHaveBeenCalledWith('file123');
-            expect(logger.warn).toHaveBeenCalledWith(
-                'Chunk deletion failed',
-                expect.objectContaining({
-                    messageId: 'msg2',
-                    error: 'Network error',
-                }),
-            );
-            expect(logger.success).toHaveBeenCalledWith(
-                'File deletion completed',
-                expect.objectContaining({
-                    deletedChunks: 2,
-                    failedChunks: 1,
-                    totalChunks: 3,
-                }),
-            );
         });
 
         it('deletes file from registry even if all chunks fail', async () => {
             const mockFile = {
                 id: 'file123',
                 name: 'test.txt',
+                hash: 'abc123',
+                chunkRegistryId: 'reg123',
+                size: 1024,
+                uploadedAt: new Date().toISOString(),
+            };
+
+            const mockRegistry = {
+                id: 'reg123',
+                hash: 'abc123',
                 chunks: [
                     { mId: 'msg1', cId: 'ch1' },
                     { mId: 'msg2', cId: 'ch2' },
                 ],
-                hash: 'abc123',
-                size: 1024,
+                refCount: 1,
                 compressed: true,
-                uploadedAt: new Date().toISOString(),
+                createdAt: new Date().toISOString(),
             };
 
             mockRepository.getFile.mockResolvedValue(mockFile);
+            mockRepository.getChunkRegistry.mockResolvedValue(mockRegistry);
+            mockRepository.decrementChunkRegistryRefCount.mockResolvedValue(0);
             vi.mocked(mockChannel.messages!.fetch as any).mockRejectedValue(
                 new Error('Discord API error'),
             );
@@ -262,62 +307,229 @@ describe('deleter', () => {
 
             expect(fileName).toBe('test.txt');
             expect(mockRepository.deleteFile).toHaveBeenCalledWith('file123');
-            expect(logger.success).toHaveBeenCalledWith(
-                'File deletion completed',
-                expect.objectContaining({
-                    deletedChunks: 0,
-                    failedChunks: 2,
-                }),
-            );
         });
 
         it('handles file with no chunks', async () => {
             const mockFile = {
                 id: 'file123',
                 name: 'empty.txt',
-                chunks: [],
                 hash: 'abc123',
+                chunkRegistryId: 'reg123',
                 size: 0,
-                compressed: true,
                 uploadedAt: new Date().toISOString(),
             };
 
+            const mockRegistry = {
+                id: 'reg123',
+                hash: 'abc123',
+                chunks: [],
+                refCount: 1,
+                compressed: true,
+                createdAt: new Date().toISOString(),
+            };
+
             mockRepository.getFile.mockResolvedValue(mockFile);
+            mockRepository.getChunkRegistry.mockResolvedValue(mockRegistry);
+            mockRepository.decrementChunkRegistryRefCount.mockResolvedValue(0);
 
             const fileName = await deleteFile(mockClient as Client, 'file123');
 
             expect(fileName).toBe('empty.txt');
             expect(mockRepository.deleteFile).toHaveBeenCalledWith('file123');
             expect(mockMessage.delete).not.toHaveBeenCalled();
-            expect(logger.success).toHaveBeenCalledWith(
-                'File deletion completed',
-                expect.objectContaining({
-                    deletedChunks: 0,
-                    failedChunks: 0,
-                    totalChunks: 0,
-                }),
-            );
         });
 
         it('uses queue for sequential deletion', async () => {
             const mockFile = {
                 id: 'file123',
                 name: 'test.txt',
+                hash: 'abc123',
+                chunkRegistryId: 'reg123',
+                size: 1024,
+                uploadedAt: new Date().toISOString(),
+            };
+
+            const mockRegistry = {
+                id: 'reg123',
+                hash: 'abc123',
                 chunks: [
                     { mId: 'msg1', cId: 'ch1' },
                     { mId: 'msg2', cId: 'ch2' },
                 ],
-                hash: 'abc123',
-                size: 1024,
+                refCount: 1,
                 compressed: true,
-                uploadedAt: new Date().toISOString(),
+                createdAt: new Date().toISOString(),
             };
 
             mockRepository.getFile.mockResolvedValue(mockFile);
+            mockRepository.getChunkRegistry.mockResolvedValue(mockRegistry);
+            mockRepository.decrementChunkRegistryRefCount.mockResolvedValue(0);
 
             await deleteFile(mockClient as Client, 'file123');
 
             expect(mockQueueAdd).toHaveBeenCalledTimes(2);
+        });
+    });
+
+    describe('deleteFile with deduplication', () => {
+        it('deletes Discord chunks when refCount reaches 0 (last reference)', async () => {
+            const mockFile = {
+                id: 'file123',
+                name: 'test.txt',
+                hash: 'abc123',
+                chunkRegistryId: 'reg123',
+                size: 1024,
+                uploadedAt: new Date().toISOString(),
+            };
+
+            const mockRegistry = {
+                id: 'reg123',
+                hash: 'abc123',
+                chunks: [
+                    { mId: 'msg1', cId: 'ch1' },
+                    { mId: 'msg2', cId: 'ch2' },
+                ],
+                refCount: 1,
+                compressed: true,
+                createdAt: new Date().toISOString(),
+            };
+
+            mockRepository.getFile.mockResolvedValue(mockFile);
+            mockRepository.getChunkRegistry.mockResolvedValue(mockRegistry);
+            mockRepository.decrementChunkRegistryRefCount.mockResolvedValue(0);
+
+            const fileName = await deleteFile(mockClient as Client, 'file123');
+
+            expect(fileName).toBe('test.txt');
+            expect(mockMessage.delete).toHaveBeenCalledTimes(2);
+            expect(mockRepository.deleteFile).toHaveBeenCalledWith('file123');
+            expect(mockRepository.deleteChunkRegistry).toHaveBeenCalledWith('reg123');
+            expect(logger.info).toHaveBeenCalledWith(
+                'Deleting Discord chunks (last reference)',
+                expect.objectContaining({
+                    registryId: 'reg123',
+                }),
+            );
+            expect(logger.success).toHaveBeenCalledWith(
+                'File deletion completed',
+                expect.objectContaining({
+                    chunksDeleted: true,
+                }),
+            );
+        });
+
+        it('skips Discord chunk deletion when refCount > 0 (other references exist)', async () => {
+            const mockFile = {
+                id: 'file123',
+                name: 'duplicate.txt',
+                hash: 'abc123',
+                chunkRegistryId: 'reg123',
+                size: 1024,
+                uploadedAt: new Date().toISOString(),
+            };
+
+            const mockRegistry = {
+                id: 'reg123',
+                hash: 'abc123',
+                chunks: [
+                    { mId: 'msg1', cId: 'ch1' },
+                    { mId: 'msg2', cId: 'ch2' },
+                ],
+                refCount: 3,
+                compressed: true,
+                createdAt: new Date().toISOString(),
+            };
+
+            mockRepository.getFile.mockResolvedValue(mockFile);
+            mockRepository.getChunkRegistry.mockResolvedValue(mockRegistry);
+            mockRepository.decrementChunkRegistryRefCount.mockResolvedValue(2);
+
+            const fileName = await deleteFile(mockClient as Client, 'file123');
+
+            expect(fileName).toBe('duplicate.txt');
+            expect(mockMessage.delete).not.toHaveBeenCalled();
+            expect(mockRepository.deleteFile).toHaveBeenCalledWith('file123');
+            expect(mockRepository.decrementChunkRegistryRefCount).toHaveBeenCalledWith('reg123');
+            expect(mockRepository.deleteChunkRegistry).not.toHaveBeenCalled();
+            expect(logger.info).toHaveBeenCalledWith(
+                'Chunk registry retained (other files reference it)',
+                expect.objectContaining({
+                    registryId: 'reg123',
+                    remainingRefs: 2,
+                }),
+            );
+            expect(logger.success).toHaveBeenCalledWith(
+                'File deletion completed',
+                expect.objectContaining({
+                    chunksDeleted: false,
+                }),
+            );
+        });
+
+        it('deletes chunks when refCount is exactly 1', async () => {
+            const mockFile = {
+                id: 'file123',
+                name: 'test.txt',
+                hash: 'abc123',
+                chunkRegistryId: 'reg123',
+                size: 1024,
+                uploadedAt: new Date().toISOString(),
+            };
+
+            const mockRegistry = {
+                id: 'reg123',
+                hash: 'abc123',
+                chunks: [{ mId: 'msg1', cId: 'ch1' }],
+                refCount: 1,
+                compressed: true,
+                createdAt: new Date().toISOString(),
+            };
+
+            mockRepository.getFile.mockResolvedValue(mockFile);
+            mockRepository.getChunkRegistry.mockResolvedValue(mockRegistry);
+            mockRepository.decrementChunkRegistryRefCount.mockResolvedValue(0);
+
+            await deleteFile(mockClient as Client, 'file123');
+
+            expect(mockMessage.delete).toHaveBeenCalledTimes(1);
+            expect(logger.info).toHaveBeenCalledWith(
+                'Deleting Discord chunks (last reference)',
+                expect.any(Object),
+            );
+        });
+
+        it('logs refCount information during deletion', async () => {
+            const mockFile = {
+                id: 'file123',
+                name: 'test.txt',
+                hash: 'abc123',
+                chunkRegistryId: 'reg123',
+                size: 1024,
+                uploadedAt: new Date().toISOString(),
+            };
+
+            const mockRegistry = {
+                id: 'reg123',
+                hash: 'abc123',
+                chunks: [{ mId: 'msg1', cId: 'ch1' }],
+                refCount: 5,
+                compressed: true,
+                createdAt: new Date().toISOString(),
+            };
+
+            mockRepository.getFile.mockResolvedValue(mockFile);
+            mockRepository.getChunkRegistry.mockResolvedValue(mockRegistry);
+            mockRepository.decrementChunkRegistryRefCount.mockResolvedValue(4);
+
+            await deleteFile(mockClient as Client, 'file123');
+
+            expect(logger.info).toHaveBeenCalledWith(
+                'Starting file deletion',
+                expect.objectContaining({
+                    registryId: 'reg123',
+                    currentRefCount: 5,
+                }),
+            );
         });
     });
 });

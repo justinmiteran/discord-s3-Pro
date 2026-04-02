@@ -7,6 +7,47 @@ import { loginSchema, refreshSchema, logoutSchema } from '../validation/schemas.
 export const createAuthRoutes = (): Router => {
     const router = Router();
 
+    /**
+     * @openapi
+     * /auth/login:
+     *   post:
+     *     tags:
+     *       - Authentication
+     *     summary: User login
+     *     description: Authenticate user and receive access and refresh tokens
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             type: object
+     *             required:
+     *               - username
+     *               - password
+     *             properties:
+     *               username:
+     *                 type: string
+     *                 example: admin
+     *               password:
+     *                 type: string
+     *                 format: password
+     *                 example: password123
+     *     responses:
+     *       200:
+     *         description: Login successful
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/AuthTokens'
+     *       401:
+     *         description: Invalid credentials
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/Error'
+     *       429:
+     *         description: Too many login attempts
+     */
     router.post(
         '/auth/login',
         express.json(),
@@ -22,6 +63,40 @@ export const createAuthRoutes = (): Router => {
         },
     );
 
+    /**
+     * @openapi
+     * /auth/refresh:
+     *   post:
+     *     tags:
+     *       - Authentication
+     *     summary: Refresh access token
+     *     description: Exchange a valid refresh token for a new access token and refresh token
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             type: object
+     *             required:
+     *               - refreshToken
+     *             properties:
+     *               refreshToken:
+     *                 type: string
+     *                 description: Valid refresh token from login
+     *     responses:
+     *       200:
+     *         description: Token refreshed successfully
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/AuthTokens'
+     *       401:
+     *         description: Invalid or expired refresh token
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/Error'
+     */
     router.post(
         '/auth/refresh',
         express.json(),
@@ -36,6 +111,44 @@ export const createAuthRoutes = (): Router => {
         },
     );
 
+    /**
+     * @openapi
+     * /auth/logout:
+     *   post:
+     *     tags:
+     *       - Authentication
+     *     summary: User logout
+     *     description: Invalidate refresh token and end user session
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             type: object
+     *             required:
+     *               - refreshToken
+     *             properties:
+     *               refreshToken:
+     *                 type: string
+     *                 description: Refresh token to invalidate
+     *     responses:
+     *       200:
+     *         description: Logout successful
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 success:
+     *                   type: boolean
+     *                   example: true
+     *       400:
+     *         description: Invalid request
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/Error'
+     */
     router.post(
         '/auth/logout',
         express.json(),

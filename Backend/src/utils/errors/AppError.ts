@@ -75,3 +75,15 @@ export class EncryptionError extends AppError {
         super(`Encryption error: ${message}`, 500);
     }
 }
+
+/**
+ * Error for file size limit exceeded (413)
+ */
+export class FileTooLargeError extends AppError {
+    constructor(fileSize: number, maxSize: number) {
+        super(
+            `File size (${(fileSize / 1024 / 1024).toFixed(2)} MB) exceeds maximum allowed size (${(maxSize / 1024 / 1024).toFixed(2)} MB)`,
+            413,
+        );
+    }
+}

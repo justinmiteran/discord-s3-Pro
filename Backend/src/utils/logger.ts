@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { sanitize } from './sanitizer.js';
 
 /**
  * Log levels with priority
@@ -17,7 +18,8 @@ export enum LogLevel {
  * Log configuration
  */
 interface LogConfig {
-    level: LogLevel;
+    consoleLevel: LogLevel;
+    fileLevel: LogLevel;
     enableConsole: boolean;
     enableFile: boolean;
     enableJson: boolean;
@@ -62,7 +64,8 @@ class Logger {
 
     constructor(config?: Partial<LogConfig>) {
         this.config = {
-            level: LogLevel.INFO,
+            consoleLevel: LogLevel.INFO,
+            fileLevel: LogLevel.DEBUG,
             enableConsole: true,
             enableFile: true,
             enableJson: false,
@@ -202,12 +205,12 @@ class Logger {
         context?: Record<string, any>,
         error?: Error,
     ): void {
-        // Check if log level is enabled
-        if (level < this.config.level) return;
+        // Sanitize context to prevent sensitive data leakage
+        const sanitizedContext = context ? sanitize(context) : undefined;
 
         // Console output
-        if (this.config.enableConsole) {
-            const consoleMsg = this.formatConsoleMessage(levelName, message, context);
+        if (this.config.enableConsole && level >= this.config.consoleLevel) {
+            const consoleMsg = this.formatConsoleMessage(levelName, message, sanitizedContext);
             if (level >= LogLevel.ERROR) {
                 console.error(consoleMsg);
             } else {
@@ -216,8 +219,8 @@ class Logger {
         }
 
         // File output
-        if (this.config.enableFile) {
-            const fileMsg = this.formatFileMessage(levelName, message, context);
+        if (this.config.enableFile && level >= this.config.fileLevel) {
+            const fileMsg = this.formatFileMessage(levelName, message, sanitizedContext);
 
             // Write to app.log
             if (this.appLogStream) {
@@ -234,7 +237,7 @@ class Logger {
 
             // Write to JSON log
             if (this.config.enableJson && this.jsonLogStream) {
-                const logEntry = this.createLogEntry(levelName, message, context, error);
+                const logEntry = this.createLogEntry(levelName, message, sanitizedContext, error);
                 this.jsonLogStream.write(JSON.stringify(logEntry) + '\n');
             }
         }
@@ -307,10 +310,17 @@ class Logger {
     }
 
     /**
-     * Sets the minimum log level
+     * Définit le niveau minimum pour la console
      */
-    setLevel(level: LogLevel): void {
-        this.config.level = level;
+    setConsoleLevel(level: LogLevel): void {
+        this.config.consoleLevel = level;
+    }
+
+    /**
+     * Définit le niveau minimum pour les fichiers
+     */
+    setFileLevel(level: LogLevel): void {
+        this.config.fileLevel = level;
     }
 
     /**
@@ -331,7 +341,8 @@ class Logger {
 
 // Create and export singleton instance
 const logger = new Logger({
-    level: process.env.LOG_LEVEL ? parseInt(process.env.LOG_LEVEL) : LogLevel.INFO,
+    consoleLevel: process.env.LOG_LEVEL ? parseInt(process.env.LOG_LEVEL) : LogLevel.INFO,
+    fileLevel: process.env.FILE_LOG_LEVEL ? parseInt(process.env.FILE_LOG_LEVEL) : LogLevel.DEBUG,
     enableConsole: process.env.NODE_ENV !== 'test',
     enableFile: process.env.NODE_ENV !== 'test',
     enableJson: process.env.LOG_JSON === 'true',

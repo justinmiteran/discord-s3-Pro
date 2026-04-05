@@ -10,6 +10,21 @@ vi.mock('../../../config/index.js', () => ({
     channels: ['ch1', 'ch2'],
 }));
 
+vi.mock('../../../core/keyRotation.js', () => ({
+    keyRotationManager: {
+        getActiveKey: vi.fn(() => ({ id: 'key1', key: Buffer.alloc(32) })),
+        getKeyById: vi.fn(() => Buffer.alloc(32)),
+        encryptWithActiveKey: vi.fn((buffer: Buffer) => ({
+            encrypted: buffer,
+            keyId: 'key1',
+        })),
+        tryDecryptWithAllKeys: vi.fn((buffer: Buffer) => ({
+            data: buffer,
+            keyId: 'key1',
+        })),
+    },
+}));
+
 vi.mock('../../../utils/logger.js', () => ({
     default: {
         debug: vi.fn(),
@@ -30,6 +45,11 @@ vi.mock('../../../core/database.js', () => ({
 const mockQueueAdd = vi.fn();
 vi.mock('../../../core/queueManager.js', () => ({
     default: { add: (fn: any) => mockQueueAdd(fn) },
+    TaskPriority: {
+        HIGH: 0,
+        NORMAL: 1,
+        LOW: 2,
+    },
 }));
 
 import { deleteFile } from '../../../core/storage/deleter.js';
@@ -55,6 +75,7 @@ describe('deleter', () => {
             id: 'ch1',
             messages: {
                 fetch: vi.fn().mockResolvedValue(mockMessage),
+                delete: vi.fn().mockResolvedValue(undefined),
             } as any,
         } as any;
 
@@ -74,7 +95,7 @@ describe('deleter', () => {
         };
 
         mockGetRepository.mockReturnValue(mockRepository);
-        mockQueueAdd.mockImplementation((fn) => fn());
+        mockQueueAdd.mockImplementation(async (fn) => await fn());
     });
 
     describe('deleteFile', () => {
@@ -123,7 +144,7 @@ describe('deleter', () => {
             const fileName = await deleteFile(mockClient as Client, 'file123');
 
             expect(fileName).toBe('test.txt');
-            expect(mockMessage.delete).toHaveBeenCalledTimes(2);
+            expect(mockChannel.messages!.delete).toHaveBeenCalledTimes(2);
             expect(mockRepository.deleteFile).toHaveBeenCalledWith('file123');
             expect(mockRepository.deleteChunkRegistry).toHaveBeenCalledWith('reg123');
         });
@@ -157,7 +178,7 @@ describe('deleter', () => {
             const fileName = await deleteFile(mockClient as Client, 'file123');
 
             expect(fileName).toBe('duplicate.txt');
-            expect(mockMessage.delete).not.toHaveBeenCalled();
+            expect(mockChannel.messages!.delete).not.toHaveBeenCalled();
             expect(mockRepository.deleteFile).toHaveBeenCalledWith('file123');
             expect(mockRepository.deleteChunkRegistry).not.toHaveBeenCalled();
             expect(logger.info).toHaveBeenCalledWith(
@@ -336,7 +357,7 @@ describe('deleter', () => {
 
             expect(fileName).toBe('empty.txt');
             expect(mockRepository.deleteFile).toHaveBeenCalledWith('file123');
-            expect(mockMessage.delete).not.toHaveBeenCalled();
+            expect(mockChannel.messages!.delete).not.toHaveBeenCalled();
         });
 
         it('uses queue for sequential deletion', async () => {
@@ -401,7 +422,7 @@ describe('deleter', () => {
             const fileName = await deleteFile(mockClient as Client, 'file123');
 
             expect(fileName).toBe('test.txt');
-            expect(mockMessage.delete).toHaveBeenCalledTimes(2);
+            expect(mockChannel.messages!.delete).toHaveBeenCalledTimes(2);
             expect(mockRepository.deleteFile).toHaveBeenCalledWith('file123');
             expect(mockRepository.deleteChunkRegistry).toHaveBeenCalledWith('reg123');
             expect(logger.info).toHaveBeenCalledWith(
@@ -447,7 +468,7 @@ describe('deleter', () => {
             const fileName = await deleteFile(mockClient as Client, 'file123');
 
             expect(fileName).toBe('duplicate.txt');
-            expect(mockMessage.delete).not.toHaveBeenCalled();
+            expect(mockChannel.messages!.delete).not.toHaveBeenCalled();
             expect(mockRepository.deleteFile).toHaveBeenCalledWith('file123');
             expect(mockRepository.decrementChunkRegistryRefCount).toHaveBeenCalledWith('reg123');
             expect(mockRepository.deleteChunkRegistry).not.toHaveBeenCalled();
@@ -491,7 +512,7 @@ describe('deleter', () => {
 
             await deleteFile(mockClient as Client, 'file123');
 
-            expect(mockMessage.delete).toHaveBeenCalledTimes(1);
+            expect(mockChannel.messages!.delete).toHaveBeenCalledTimes(1);
             expect(logger.info).toHaveBeenCalledWith(
                 'Deleting Discord chunks (last reference)',
                 expect.any(Object),

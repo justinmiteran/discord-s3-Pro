@@ -242,7 +242,7 @@ describe('LazyReencryptionService', () => {
 
             await expect(
                 service.reencryptRegistry(mockClient, registry, 'file1'),
-            ).rejects.toThrow('Chunk 1 missing from Discord');
+            ).rejects.toThrow('CHUNK_LOST');
         });
 
         it('should preserve registry metadata', async () => {

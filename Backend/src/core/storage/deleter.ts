@@ -1,9 +1,10 @@
-import { Client, TextChannel } from 'discord.js';
-import queue from '../queueManager.js';
+import { Client } from 'discord.js';
+import { TaskPriority } from '../queueManager.js';
 import logger from '../../utils/logger.js';
 import { getRepository } from '../database.js';
 import { DISCORD_ERROR_CODES } from '../../constants/index.js';
 import { NotFoundError, toError } from '../../utils/errors/AppError.js';
+import { DiscordChunkManager } from '../discord/discordChunkManager.js';
 
 /**
  * Deletes a file from the registry
@@ -48,50 +49,15 @@ export const deleteFile = async (client: Client, fileId: string): Promise<string
             chunks: registry.chunks.length,
         });
 
-        let deletedChunks = 0;
-        let failedChunks = 0;
-
-        for (const chunk of registry.chunks) {
-            await queue.add(async () => {
-                try {
-                    const channel = (await client.channels.fetch(chunk.cId)) as TextChannel;
-                    if (!channel) {
-                        logger.warn('Channel not found for chunk deletion', {
-                            channelId: chunk.cId,
-                            messageId: chunk.mId,
-                        });
-                        failedChunks++;
-                        return;
-                    }
-
-                    const msg = await channel.messages.fetch(chunk.mId);
-                    await msg.delete();
-                    deletedChunks++;
-
-                    logger.debug('Chunk deleted', {
-                        messageId: chunk.mId,
-                        channelId: chunk.cId,
-                        progress: `${deletedChunks}/${registry.chunks.length}`,
-                    });
-                } catch (err) {
-                    const error = toError(err);
-                    if ((err as any).code === DISCORD_ERROR_CODES.MESSAGE_NOT_FOUND) {
-                        logger.debug('Chunk already deleted', { messageId: chunk.mId });
-                        deletedChunks++;
-                    } else {
-                        logger.warn('Chunk deletion failed', {
-                            messageId: chunk.mId,
-                            error: error.message,
-                        });
-                        failedChunks++;
-                    }
-                }
-            });
-        }
+        const chunkManager = new DiscordChunkManager(client);
+        const { deleted, failed } = await chunkManager.deleteChunks(
+            registry.chunks,
+            TaskPriority.NORMAL,
+        );
 
         logger.info('Discord chunks deletion completed', {
-            deletedChunks,
-            failedChunks,
+            deletedChunks: deleted,
+            failedChunks: failed,
             totalChunks: registry.chunks.length,
         });
 

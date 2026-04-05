@@ -44,6 +44,11 @@ A professional-grade, decentralized cloud storage solution that leverages Discor
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
 │  │ Compress │→ │  Chunk   │→ │ Encrypt  │→ │  Queue   │   │
 │  └──────────┘  └──────────┘  └──────────┘  └──────────┘   │
+│                                                              │
+│  ┌────────────────────────────────────────────────────┐    │
+│  │         Discord Chunk Manager (Centralized)        │    │
+│  │  Upload • Download • Delete • Batch Operations     │    │
+│  └────────────────────────────────────────────────────┘    │
 └──────────────────────┬──────────────────────────────────────┘
                        │
         ┌──────────────┼──────────────┐
@@ -274,7 +279,7 @@ npm run test:coverage # Run tests with coverage report
 ### Testing
 
 Comprehensive test suite with strict coverage thresholds:
-- **194 tests** across unit, integration, and E2E levels
+- **249 tests** across unit, integration, and E2E levels
 - **Coverage thresholds**: 80% statements, 75% branches, 80% functions
 - **Test categories**:
   - Unit tests: Core business logic, data processing, infrastructure, deduplication

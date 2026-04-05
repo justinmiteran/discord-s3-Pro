@@ -1,23 +1,21 @@
 import fs from 'fs';
 import crypto from 'crypto';
 import zlib from 'zlib';
-import axios from 'axios';
-import { Client, TextChannel, AttachmentBuilder } from 'discord.js';
+import { Client } from 'discord.js';
 import { Response } from 'express';
 import { server } from '../../config/index.js';
-import { encryptBuffer, decryptBuffer } from '../../pipeline/encryptStream.js';
+import { encryptBuffer } from '../../pipeline/encryptStream.js';
 import { ChunkSplitter } from '../../pipeline/chunker.js';
 import queue, { TaskPriority } from '../queueManager.js';
-import pool from '../discord/channelPool.js';
 import * as hasher from '../../utils/hasher.js';
 import { getRepository } from '../database.js';
 import { FileData, ChunkMetadata, ChunkRegistry } from '../../types/models/file.model.js';
 import logger from '../../utils/logger.js';
 import { pipeline, Writable } from 'stream';
 import { promisify } from 'util';
-import { ERROR_CODES } from '../../constants/index.js';
-import { NotFoundError, DiscordError, FileTooLargeError, toError } from '../../utils/errors/AppError.js';
-import { lazyReencryptionService } from '../reencryption/lazyReencryption.js';
+import { NotFoundError, FileTooLargeError, toError } from '../../utils/errors/AppError.js';
+import { reencryptionScheduler } from '../reencryption/reencryptionScheduler.js';
+import { DiscordChunkManager } from '../discord/discordChunkManager.js';
 
 const pipelinePromise = promisify(pipeline);
 
@@ -70,28 +68,7 @@ export const processUpload = async (
         });
 
         // Check if re-encryption is needed and trigger in background
-        if (lazyReencryptionService.needsReencryption(existingRegistry)) {
-            logger.info('Existing registry needs re-encryption, scheduling background re-encryption', {
-                registryId: existingRegistry.id,
-                oldKeyId: existingRegistry.encryptionKeyId || 'unknown',
-            });
-
-            // Trigger re-encryption in background without blocking upload
-            lazyReencryptionService.reencryptRegistry(client, existingRegistry, 'dedup-upload')
-                .then((registryId) => {
-                    logger.success('Background re-encryption completed for deduplicated file', {
-                        registryId,
-                        hash: fileHash,
-                    });
-                })
-                .catch((err) => {
-                    logger.warn('Background re-encryption failed for deduplicated file', {
-                        error: toError(err),
-                        registryId: existingRegistry.id,
-                        hash: fileHash,
-                    });
-                });
-        }
+        reencryptionScheduler.scheduleIfNeeded(client, existingRegistry, 'dedup-upload');
 
         const fileId = crypto.randomBytes(4).toString('hex');
         const fileData: FileData = {
@@ -121,6 +98,7 @@ export const processUpload = async (
 
     const chunksMetadata: ChunkMetadata[] = [];
     let encryptionKeyId: string | undefined;
+    const chunkManager = new DiscordChunkManager(client);
 
     const splitter = new ChunkSplitter(server.chunkSize);
     const readStream = fs.createReadStream(filePath);
@@ -137,26 +115,15 @@ export const processUpload = async (
 
                 const { encrypted, keyId } = encryptBuffer(chunk);
                 encryptionKeyId = keyId;
-                const channelId = pool.next();
 
-                const result = await queue.add(async () => {
-                    const channel = (await client.channels.fetch(channelId)) as TextChannel;
-                    const attachment = new AttachmentBuilder(encrypted, {
-                        name: `chunk_${currentChunkIndex}.dat`,
-                    });
-                    return await channel.send({
-                        files: [attachment],
-                    });
-                }, TaskPriority.HIGH);
+                const metadata = await chunkManager.uploadChunk(
+                    chunk,
+                    currentChunkIndex,
+                    TaskPriority.HIGH,
+                    'chunk',
+                );
 
-                logger.debug('Chunk uploaded', {
-                    chunkIndex: currentChunkIndex,
-                    channelId,
-                    messageId: result.id,
-                    size: `${(encrypted.length / 1024).toFixed(2)} KB`,
-                });
-
-                chunksMetadata.push({ mId: result.id, cId: channelId });
+                chunksMetadata.push(metadata);
                 callback();
             } catch (err) {
                 logger.error('Chunk upload failed', toError(err), {
@@ -260,28 +227,7 @@ export const downloadFile = async (
     });
 
     // Check if re-encryption is needed and trigger in background
-    if (lazyReencryptionService.needsReencryption(registry)) {
-        logger.info('Registry needs re-encryption, scheduling background re-encryption', {
-            registryId: registry.id,
-            oldKeyId: registry.encryptionKeyId || 'unknown',
-        });
-
-        // Trigger re-encryption in background without blocking download
-        lazyReencryptionService.reencryptRegistry(client, registry, fileId)
-            .then((registryId) => {
-                logger.success('Background re-encryption completed', {
-                    registryId,
-                    fileId,
-                });
-            })
-            .catch((err) => {
-                logger.warn('Background re-encryption failed', {
-                    error: toError(err),
-                    registryId: registry.id,
-                    fileId,
-                });
-            });
-    }
+    reencryptionScheduler.scheduleIfNeeded(client, registry, fileId);
 
     res.setHeader('Content-Disposition', `attachment; filename="${file.name}"`);
     res.setHeader('Content-Type', 'application/octet-stream');
@@ -295,6 +241,8 @@ export const downloadFile = async (
 
     gunzip.pipe(hasher.createVerificationStream(file.hash, file.name)).pipe(res);
 
+    const chunkManager = new DiscordChunkManager(client);
+
     try {
         let downloadedChunks = 0;
         let totalBytes = 0;
@@ -302,27 +250,13 @@ export const downloadFile = async (
         for (const chunk of registry.chunks) {
             downloadedChunks++;
 
-            const msg = await queue.add(async () => {
-                const channel = (await client.channels.fetch(chunk.cId)) as TextChannel;
-                return await channel.messages.fetch(chunk.mId);
-            }, TaskPriority.HIGH);
+            const decrypted = await chunkManager.downloadChunk(
+                chunk,
+                registry.encryptionKeyId,
+                TaskPriority.HIGH,
+                downloadedChunks,
+            );
 
-            const attachment = msg.attachments.first();
-            if (!attachment) {
-                logger.error('Chunk missing from Discord', undefined, {
-                    fileId,
-                    fileName: file.name,
-                    chunkIndex: downloadedChunks,
-                    messageId: chunk.mId,
-                    channelId: chunk.cId,
-                });
-                throw new DiscordError(
-                    `${ERROR_CODES.CHUNK_LOST}: Chunk #${downloadedChunks} missing from Discord message.`,
-                );
-            }
-
-            const { data } = await axios.get(attachment.url, { responseType: 'arraybuffer' });
-            const { decrypted } = decryptBuffer(Buffer.from(data), registry.encryptionKeyId);
             totalBytes += decrypted.length;
 
             logger.debug('Chunk recovered', {

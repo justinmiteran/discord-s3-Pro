@@ -22,8 +22,12 @@ Discord S3 Pro is a distributed cloud storage system that leverages Discord's in
 ┌─────────────────────────────────────────────────────────────┐
 │                   Core Services                              │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │ Storage      │  │ Queue        │  │ Channel      │      │
-│  │ Engine       │  │ Manager      │  │ Pool         │      │
+│  │ Storage      │  │ Queue        │  │ Discord      │      │
+│  │ Engine       │  │ Manager      │  │ Chunk Mgr    │      │
+│  └──────────────┘  └──────────────┘  └──────────────┘      │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │ Reencryption │  │ Channel      │  │ Key          │      │
+│  │ Scheduler    │  │ Pool         │  │ Rotation     │      │
 │  └──────────────┘  └──────────────┘  └──────────────┘      │
 └──────────────────────┬──────────────────────────────────────┘
                        │
@@ -49,11 +53,16 @@ Discord S3 Pro is a distributed cloud storage system that leverages Discord's in
   - Error handling
 
 ### 2. Core Services (`src/core/`)
-- **storageEngine.ts**: Orchestrates upload/download operations
-- **queueManager.ts**: Manages Discord API rate limits
-- **channelPool.ts**: Load balances across Discord channels
+- **storage/storageEngine.ts**: Orchestrates upload/download operations
+- **storage/deleter.ts**: Handles file deletion with deduplication support
+- **discord/discordChunkManager.ts**: Centralized Discord operations (upload, download, delete chunks)
+- **discord/channelPool.ts**: Load balances across Discord channels
+- **discord/bot.ts**: Discord client initialization
+- **reencryption/lazyReencryption.ts**: Background re-encryption service
+- **reencryption/reencryptionScheduler.ts**: Triggers re-encryption when needed
+- **queueManager.ts**: Manages Discord API rate limits with priority system
+- **keyRotation.ts**: Encryption key management and rotation
 - **database.ts**: Repository pattern implementation
-- **deleter.ts**: Handles file deletion
 
 ### 3. Pipeline Layer (`src/pipeline/`)
 - **chunker.ts**: Splits files into manageable chunks
@@ -100,7 +109,7 @@ Discord S3 Pro is a distributed cloud storage system that leverages Discord's in
 - Encryption algorithm encapsulation
 
 ### 3. Queue Pattern
-- Sequential task execution
+- Sequential task execution with priority levels (HIGH, NORMAL, LOW)
 - Rate limit management
 - Backpressure handling
 
@@ -108,12 +117,24 @@ Discord S3 Pro is a distributed cloud storage system that leverages Discord's in
 - Distributes chunks across Discord channels
 - Prevents single channel overload
 
+### 5. Centralized Service Pattern
+- Discord Chunk Manager consolidates all Discord operations
+- Single point of maintenance for chunk operations
+- Consistent error handling and logging
+
+### 6. Lazy Evaluation Pattern
+- Re-encryption triggered on-demand during file access
+- Non-blocking background operations
+- Preserves user experience during key rotation
+
 ## Security Features
 
 1. **AES-256-GCM Encryption**: All chunks encrypted before upload
 2. **SHA-256 Hashing**: Integrity verification on download
 3. **Environment Variables**: Sensitive credentials isolated
 4. **No Plaintext Storage**: Data never stored unencrypted
+5. **Key Rotation Support**: Seamless encryption key updates with lazy re-encryption
+6. **Deduplication Security**: Reference counting prevents premature chunk deletion
 
 ## Scalability Considerations
 

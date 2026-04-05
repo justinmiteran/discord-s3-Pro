@@ -199,8 +199,11 @@ storageBot/
 # Discord Bot Token (required)
 DISCORD_TOKEN=your_bot_token_here
 
-# 32-character encryption key (required)
-ENCRYPTION_KEY=abcdefghijklmnopqrstuvwxyz123456
+# Active encryption key (required, format: id:key)
+ENCRYPTION_KEY_ACTIVE=v1:your_32_character_secret_key_here
+
+# Legacy encryption keys (optional, for key rotation)
+# ENCRYPTION_KEY_LEGACY=v0:old_key_32_chars_here
 ```
 
 ### Operational Config (`Backend/config.cfg`)

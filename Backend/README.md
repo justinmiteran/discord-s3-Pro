@@ -240,16 +240,16 @@ Invalidate refresh token.
 
 #### GET /admin/keys
 
-List all configured encryption keys (admin only).
+List all configured encryption keys.
 
-**Authentication:** Required (Bearer token with admin role)
+**Authentication:** Required (Bearer token)
 
 **Response:**
 ```json
 {
   "keys": [
     {
-      "id": "current",
+      "id": "v2",
       "active": true,
       "createdAt": "2024-01-15T10:00:00.000Z"
     },
@@ -265,7 +265,10 @@ List all configured encryption keys (admin only).
 **Status Codes:**
 - `200 OK` - Keys retrieved successfully
 - `401 Unauthorized` - Missing or invalid token
-- `403 Forbidden` - User is not admin
+
+**Notes:**
+- Only key IDs are returned, not the actual encryption keys
+- Useful for monitoring key rotation status
 
 ---
 
@@ -431,9 +434,8 @@ curl -X DELETE http://localhost:3000/file/$FILE_ID \
 | Variable | Description | Required | Default |
 |----------|-------------|----------|---------|
 | `DISCORD_TOKEN` | Discord bot authentication token | Yes | - |
-| `ENCRYPTION_KEY` | Active 32-character encryption key | Yes | - |
-| `ENCRYPTION_KEY_V1` | Legacy encryption key (for rotation) | No | - |
-| `ENCRYPTION_KEY_V2` | Legacy encryption key (for rotation) | No | - |
+| `ENCRYPTION_KEY_ACTIVE` | Active encryption key in format `id:key` (e.g., `v2:key_32_chars`) | Yes | - |
+| `ENCRYPTION_KEY_LEGACY` | Legacy encryption keys (comma-separated, format: `id1:key1,id2:key2`) | No | - |
 | `LOG_LEVEL` | Logging level (0=DEBUG, 1=INFO, 2=SUCCESS, 3=WARN, 4=ERROR, 5=FATAL) | No | 1 |
 | `LOG_JSON` | Output logs in JSON format | No | false |
 

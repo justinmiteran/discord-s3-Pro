@@ -80,19 +80,53 @@ npm run dev
 ```
 Backend/
 ├── src/
-│   ├── api/              # HTTP routes
-│   ├── core/             # Business logic
-│   ├── pipeline/         # Data transformation
-│   ├── repositories/     # Data persistence
-│   ├── types/            # TypeScript interfaces
-│   ├── utils/            # Helper functions
-│   ├── constants/        # Application constants
-│   ├── bot.ts            # Discord client
-│   ├── config.ts         # Configuration loader
-│   └── server.ts         # Express setup
-├── logs/                 # Application logs
-├── data/                 # JSON database (if used)
-├── index.ts              # Entry point
+│   ├── api/                    # HTTP routes and middleware
+│   │   ├── middlewares/        # Auth, validation, error handling
+│   │   ├── routes/             # REST endpoints
+│   │   └── validation/         # Request schemas
+│   ├── core/                   # Business logic
+│   │   ├── auth/               # Authentication service
+│   │   ├── discord/            # Discord operations
+│   │   │   ├── bot.ts          # Discord client
+│   │   │   ├── channelPool.ts  # Load balancing
+│   │   │   └── discordChunkManager.ts  # Centralized chunk operations
+│   │   ├── reencryption/       # Key rotation
+│   │   │   ├── lazyReencryption.ts     # Background re-encryption
+│   │   │   └── reencryptionScheduler.ts # Trigger management
+│   │   ├── storage/            # File operations
+│   │   │   ├── storageEngine.ts # Upload/download orchestration
+│   │   │   └── deleter.ts      # File deletion
+│   │   ├── database.ts         # Repository pattern
+│   │   ├── keyRotation.ts      # Encryption key management
+│   │   └── queueManager.ts     # Rate limit management
+│   ├── pipeline/               # Data transformation
+│   │   ├── chunker.ts          # File splitting
+│   │   └── encryptStream.ts    # AES-256-GCM encryption
+│   ├── repositories/           # Data persistence
+│   │   ├── jsonRepository.ts   # JSON storage
+│   │   ├── mongodbRepository.ts # MongoDB storage
+│   │   └── userRepository.ts   # User authentication
+│   ├── types/                  # TypeScript definitions
+│   │   ├── dto/                # Data transfer objects
+│   │   ├── interfaces/         # Repository interfaces
+│   │   └── models/             # Data models
+│   ├── utils/                  # Helper functions
+│   │   ├── errors/             # Custom error classes
+│   │   ├── hasher.ts           # SHA-256 hashing
+│   │   ├── logger.ts           # Structured logging
+│   │   └── sanitizer.ts        # Log sanitization
+│   ├── constants/              # Application constants
+│   ├── config/                 # Configuration management
+│   ├── env.ts                  # Environment variables
+│   ├── index.ts                # Entry point
+│   └── server.ts               # Express setup
+├── logs/                       # Application logs
+├── data/                       # JSON database (if used)
+├── config.cfg                  # Operational configuration
+├── Dockerfile
+├── ARCHITECTURE.md             # System design documentation
+├── DEVELOPMENT.md              # This file
+├── KEY_ROTATION.md             # Key rotation guide
 └── package.json
 ```
 
@@ -100,37 +134,65 @@ Backend/
 
 ### 1. Create a New Route
 ```typescript
-// src/api/routes.ts
+// src/api/routes/myFeature.routes.ts
+import { Router } from 'express';
+import logger from '../../utils/logger.js';
+import { HTTP_STATUS } from '../../constants/index.js';
+
+const router = Router();
+
 router.get('/my-endpoint', async (req, res) => {
     try {
         // Implementation
         res.json({ success: true });
     } catch (err: any) {
-        logger.error(`Error: ${err.message}`);
+        logger.error('Error in my-endpoint', err);
         res.status(HTTP_STATUS.INTERNAL_ERROR).json({ error: err.message });
     }
 });
+
+export default router;
 ```
 
-### 2. Add a New Service
+### 2. Add a New Core Service
 ```typescript
 // src/core/myService.ts
 import logger from '../utils/logger.js';
+import { Client } from 'discord.js';
 
 /**
  * Description of what this service does
+ * @param client - Discord bot client
  * @param param1 - Description
  * @returns Description
  */
-export const myFunction = async (param1: string): Promise<void> => {
-    logger.info(`Starting operation: ${param1}`);
+export const myFunction = async (client: Client, param1: string): Promise<void> => {
+    logger.info('Starting operation', { param1 });
     // Implementation
 };
 ```
 
-### 3. Extend the Repository
+### 3. Extend Discord Chunk Manager
 ```typescript
-// src/types/index.ts
+// src/core/discord/discordChunkManager.ts
+
+/**
+ * New chunk operation
+ * @param chunk - Chunk metadata
+ * @param priority - Queue priority
+ * @returns Operation result
+ */
+async myChunkOperation(
+    chunk: ChunkMetadata,
+    priority: TaskPriority = TaskPriority.NORMAL,
+): Promise<void> {
+    // Use existing patterns: queue.add(), pool.next(), etc.
+}
+```
+
+### 4. Extend the Repository
+```typescript
+// src/types/interfaces/repository.interface.ts
 export interface IRepository {
     // ... existing methods
     myNewMethod(): Promise<void>;
@@ -142,6 +204,34 @@ export interface IRepository {
 ```
 
 ## Testing
+
+### Running Tests
+```bash
+# Run all tests (249 tests)
+npm test
+
+# Run with coverage report
+npm run test:coverage
+
+# Run specific test file
+npm test -- storageEngine.test.ts
+
+# Watch mode for development
+npm test -- --watch
+
+# Run only unit tests
+npm test -- unit/
+
+# Run only integration tests
+npm test -- integration/
+```
+
+### Test Organization
+- **Unit tests**: `src/__tests__/unit/` - Isolated component tests
+- **Integration tests**: `src/__tests__/integration/` - Component interaction tests
+- **E2E tests**: `src/__tests__/e2e/` - Full application stack tests
+
+See [src/__tests__/README.md](src/__tests__/README.md) for detailed test documentation.
 
 ### Manual Testing
 ```bash
@@ -178,12 +268,23 @@ Check `logs/app.log` and `logs/error.log` for detailed information.
 
 **Issue**: "Database not connected"
 - **Solution**: Ensure MongoDB is running and `mongo_uri` is correct
+- **Check**: `docker compose ps` to verify MongoDB container
 
 **Issue**: "No Discord channels configured"
 - **Solution**: Add channel IDs to `config.cfg` under `[Discord]`
+- **Verify**: Bot has access to channels and Message Content intent enabled
 
 **Issue**: Rate limit errors
 - **Solution**: Reduce concurrent operations or increase `QUEUE.RATE_LIMIT_DELAY`
+- **Alternative**: Add more channels to the pool
+
+**Issue**: "Encryption key 'vX' not found"
+- **Solution**: Add missing legacy key to environment variables
+- **See**: [KEY_ROTATION.md](KEY_ROTATION.md) for key rotation guide
+
+**Issue**: Tests failing after changes
+- **Solution**: Update mocks in `src/__tests__/helpers/`
+- **Check**: Coverage thresholds with `npm run test:coverage`
 
 ## Building for Production
 
@@ -196,12 +297,25 @@ npm start
 
 ```bash
 # Linting
-npm run lint
-npm run lint:fix
+npm run lint          # Check code quality
+npm run lint:fix      # Auto-fix issues
 
 # Formatting
-npm run format
+npm run format        # Format with Prettier
+
+# Type checking
+npm run build         # Compile TypeScript
+
+# Testing
+npm test              # Run test suite
+npm run test:coverage # Generate coverage report
 ```
+
+### Coverage Thresholds
+- **Statements**: ≥ 80%
+- **Branches**: ≥ 75%
+- **Functions**: ≥ 80%
+- **Lines**: ≥ 80%
 
 ## Contributing Guidelines
 
@@ -214,7 +328,33 @@ npm run format
 
 ## Performance Tips
 
-- Use streams for large files
-- Avoid loading entire files into memory
-- Leverage the queue for Discord API calls
-- Monitor `logs/` for bottlenecks
+- Use streams for large files (avoid loading into memory)
+- Leverage the centralized Discord Chunk Manager for batch operations
+- Monitor queue size in logs (warnings at >10 tasks)
+- Use multiple Discord channels (3-5 recommended) for load balancing
+- Enable MongoDB for production (faster than JSON)
+- Adjust `chunk_size` based on network speed (default: 8MB)
+- Use lazy re-encryption for seamless key rotation
+- Monitor logs for bottlenecks: `logs/app.log`
+
+## Architecture Patterns
+
+### Centralized Service Pattern
+All Discord operations go through `discordChunkManager.ts`:
+- Single point of maintenance
+- Consistent error handling
+- Reusable batch operations
+
+### Lazy Evaluation Pattern
+Re-encryption triggered on-demand:
+- Non-blocking background operations
+- Preserves user experience
+- Automatic migration during file access
+
+### Priority Queue Pattern
+Tasks prioritized by importance:
+- `HIGH`: User operations (upload, download)
+- `NORMAL`: Regular operations (delete)
+- `LOW`: Background tasks (re-encryption)
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed design patterns.

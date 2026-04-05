@@ -1,93 +1,66 @@
-# 🎚️ Guide des Niveaux de Log
+# Log Levels Guide
 
-## 🚀 Activation Rapide des Logs DEBUG
+## Quick Start
 
-### Méthode 1 : Fichier .env (Permanent)
+### Enable DEBUG Logs
+
+**Environment Variable (.env):**
 ```env
 LOG_LEVEL=0
 ```
 
-### Méthode 2 : Ligne de Commande (Temporaire)
-
-**PowerShell:**
-```powershell
-$env:LOG_LEVEL="0"; npm run dev
-```
-
-**CMD:**
-```cmd
-set LOG_LEVEL=0 && npm run dev
-```
-
-**Linux/Mac:**
+**Command Line (Temporary):**
 ```bash
+# PowerShell
+$env:LOG_LEVEL="0"; npm run dev
+
+# Bash/Linux/Mac
 LOG_LEVEL=0 npm run dev
 ```
 
-## 📊 Niveaux de Log Disponibles
+## Available Log Levels
 
-| Niveau | Valeur | Utilisation | Logs Affichés |
-|--------|--------|-------------|---------------|
-| **DEBUG** | 0 | Développement, debugging | Tout (DEBUG, INFO, SUCCESS, WARN, ERROR, FATAL) |
-| **INFO** | 1 | Production normale | INFO, SUCCESS, WARN, ERROR, FATAL |
-| **SUCCESS** | 2 | Production optimisée | SUCCESS, WARN, ERROR, FATAL |
-| **WARN** | 3 | Surveillance des problèmes | WARN, ERROR, FATAL |
-| **ERROR** | 4 | Erreurs uniquement | ERROR, FATAL |
-| **FATAL** | 5 | Erreurs critiques uniquement | FATAL |
+| Level | Value | Use Case | Logs Displayed |
+|-------|-------|----------|----------------|
+| **DEBUG** | 0 | Development, debugging | All logs |
+| **INFO** | 1 | Production (default) | INFO, SUCCESS, WARN, ERROR, FATAL |
+| **SUCCESS** | 2 | Minimal production | SUCCESS, WARN, ERROR, FATAL |
+| **WARN** | 3 | Problem monitoring | WARN, ERROR, FATAL |
+| **ERROR** | 4 | Errors only | ERROR, FATAL |
+| **FATAL** | 5 | Critical errors only | FATAL |
 
-## 🎯 Recommandations par Environnement
+## Recommended Settings
 
-### Développement Local
+### Development
 ```env
-LOG_LEVEL=0  # DEBUG - Voir tous les détails
+LOG_LEVEL=0  # DEBUG - See everything
 LOG_JSON=false
 ```
 
-**Avantages:**
-- Voir toutes les opérations
-- Débugger facilement
-- Comprendre le flux d'exécution
-
-### Staging/Test
+### Staging/Testing
 ```env
-LOG_LEVEL=1  # INFO - Équilibre entre détails et bruit
+LOG_LEVEL=1  # INFO - Balanced
 LOG_JSON=true
 ```
-
-**Avantages:**
-- Logs structurés pour analyse
-- Moins de bruit que DEBUG
-- Toujours assez de détails
 
 ### Production
 ```env
-LOG_LEVEL=1  # INFO - Opérations normales
+LOG_LEVEL=1  # INFO - Standard
 LOG_JSON=true
 ```
 
-**Avantages:**
-- Performance optimale
-- Logs parsables automatiquement
-- Intégration avec outils de monitoring
-
-### Production Optimisée
+### High-Performance Production
 ```env
 LOG_LEVEL=2  # SUCCESS - Minimal
 LOG_JSON=true
 ```
 
-**Avantages:**
-- Très peu de logs
-- Performance maximale
-- Uniquement les succès et problèmes
-
-## 📝 Exemples de Logs par Niveau
+## Log Examples
 
 ### DEBUG (0)
 ```
 [DEBUG] Loading environment variables
 [DEBUG] Discord channels loaded { count: 3 }
-[DEBUG] ChunkSplitter initialized { chunkSize: 8388608 }
 [DEBUG] Chunk uploaded { chunkIndex: 1, channelId: "123..." }
 [DEBUG] Hash calculated { hash: "a7f2b...", duration: 150 }
 ```
@@ -96,7 +69,6 @@ LOG_JSON=true
 ```
 [INFO] Initializing database { provider: "mongodb" }
 [INFO] Starting file upload { fileName: "test.txt", size: 1024 }
-[INFO] Starting file download { fileId: "abc123" }
 [INFO] GET /status - 200 (5ms)
 ```
 
@@ -113,13 +85,12 @@ LOG_JSON=true
 [WARN] Queue size growing { queueSize: 15 }
 [WARN] Rate limit hit { resetAfter: 1000 }
 [WARN] File not found for deletion { fileId: "invalid" }
-[WARN] Channel not found for chunk deletion
 ```
 
 ### ERROR (4)
 ```
 [ERROR] Upload pipeline failed { fileName: "test.txt", duration: 2500 }
-[ERROR] Chunk upload failed { chunkIndex: 5, fileName: "test.txt" }
+[ERROR] Chunk upload failed { chunkIndex: 5 }
 [ERROR] MongoDB connection failed
 [ERROR] Integrity verification failed - CORRUPTION DETECTED
 ```
@@ -127,133 +98,73 @@ LOG_JSON=true
 ### FATAL (5)
 ```
 [FATAL] Configuration file missing { path: "/app/config.cfg" }
-[FATAL] Database initialization failed { provider: "mongodb" }
-[FATAL] System startup failed { duration: 1500 }
-[FATAL] Uncaught exception
+[FATAL] Database initialization failed
+[FATAL] System startup failed
 ```
 
-## 🔍 Filtrage des Logs
+## Filtering Logs
 
-### Voir Uniquement un Niveau
+### View Specific Level
 ```bash
-# DEBUG uniquement
+# DEBUG only
 grep "\[DEBUG\]" logs/app.log
 
-# INFO uniquement
-grep "\[INFO\]" logs/app.log
-
-# SUCCESS uniquement
-grep "\[SUCCESS\]" logs/app.log
-
-# WARN uniquement
-grep "\[WARN\]" logs/app.log
-
-# ERROR uniquement
-grep "\[ERROR\]" logs/app.log
-
-# FATAL uniquement
-grep "\[FATAL\]" logs/app.log
-```
-
-### Voir Plusieurs Niveaux
-```bash
-# Erreurs et warnings
+# Errors and warnings
 grep -E "\[ERROR\]|\[WARN\]" logs/app.log
 
-# Problèmes critiques
+# Critical issues
 grep -E "\[ERROR\]|\[FATAL\]" logs/app.log
-
-# Succès et infos
-grep -E "\[SUCCESS\]|\[INFO\]" logs/app.log
 ```
 
-## 📊 Analyse des Logs DEBUG
-
-### Voir les Opérations de Configuration
+### Real-time Monitoring
 ```bash
-grep "\[DEBUG\].*configuration" logs/app.log
-```
+# Watch all logs
+tail -f logs/app.log
 
-### Voir les Opérations de Chunks
-```bash
-grep "\[DEBUG\].*[Cc]hunk" logs/app.log
-```
+# Watch errors only
+tail -f logs/error.log
 
-### Voir les Opérations de Hash
-```bash
-grep "\[DEBUG\].*[Hh]ash" logs/app.log
-```
-
-### Voir les Opérations de Database
-```bash
-grep "\[DEBUG\].*MongoDB\|JSON" logs/app.log
-```
-
-## 🎛️ Changer le Niveau en Cours d'Exécution
-
-Le niveau de log est lu au démarrage. Pour changer :
-
-1. Modifier `.env`
-2. Redémarrer l'application
-
-Ou utiliser la méthode programmatique (à ajouter si besoin) :
-```typescript
-import logger, { LogLevel } from './utils/logger.js';
-logger.setLevel(LogLevel.DEBUG);
-```
-
-## 💡 Astuces
-
-### Développement Actif
-```env
-LOG_LEVEL=0  # Tout voir
-```
-
-### Debugging d'un Problème Spécifique
-```env
-LOG_LEVEL=0  # Activer DEBUG
-```
-Puis filtrer :
-```bash
+# Filter by keyword
 tail -f logs/app.log | grep "upload"
 ```
 
-### Performance Testing
+## Performance Impact
+
+- **DEBUG (0)**: High log volume, slight performance impact
+- **INFO (1)**: Balanced, minimal impact (recommended)
+- **SUCCESS (2)**: Low volume, negligible impact
+- **WARN+ (3-5)**: Very low volume, no measurable impact
+
+## Log Rotation
+
+- Automatic rotation at 10MB
+- Archives kept with timestamp
+- Location: `logs/app.log`, `logs/error.log`
+
+## Troubleshooting
+
+### Logs Not Appearing
+
+1. Check `.env` file: `LOG_LEVEL=0`
+2. Restart application
+3. Verify no spaces around `=`
+4. Check file permissions on `logs/` directory
+
+### Too Many Logs
+
+1. Increase `LOG_LEVEL` to `1` or `2`
+2. Use log filtering with `grep`
+3. Enable log rotation (automatic)
+
+### Production Monitoring
+
 ```env
-LOG_LEVEL=2  # Minimal
-```
-Pour ne pas impacter les performances avec trop de logs.
-
-### Monitoring Production
-```env
-LOG_LEVEL=1  # INFO
-LOG_JSON=true
-```
-Puis utiliser un outil comme Grafana Loki ou ELK Stack.
-
-## 🚨 Attention
-
-- **DEBUG en production** = Beaucoup de logs = Fichiers volumineux
-- **Rotation automatique** à 10MB pour éviter les problèmes
-- **Archives** conservées avec timestamp
-- **Performance** légèrement impactée avec LOG_LEVEL=0
-
-## ✅ Validation
-
-Après avoir changé le niveau :
-
-```bash
-# Vérifier que DEBUG est actif
-npm run dev
-
-# Vous devriez voir :
-[DEBUG] Loading environment variables
-[DEBUG] Loading configuration file
-[DEBUG] Discord channels loaded
-# etc.
+LOG_LEVEL=1
+LOG_JSON=true  # For parsing with tools like ELK, Grafana Loki
 ```
 
-Si vous ne voyez pas les logs DEBUG :
-1. Vérifier que `.env` contient `LOG_LEVEL=0`
-2. Redémarrer l'application
-3. Vérifier qu'il n'y a pas d'espace avant/après le `=`
+Then use log aggregation tools:
+- Grafana Loki
+- ELK Stack (Elasticsearch, Logstash, Kibana)
+- Datadog
+- Splunk

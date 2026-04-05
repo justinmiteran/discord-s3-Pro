@@ -276,6 +276,8 @@ npm test             # Run test suite
 npm run test:coverage # Run tests with coverage report
 ```
 
+See [Backend/README.md](Backend/README.md) for detailed API documentation.
+
 ### Testing
 
 Comprehensive test suite with strict coverage thresholds:
@@ -297,6 +299,19 @@ See [Backend/src/__tests__/README.md](Backend/src/__tests__/README.md) for detai
 - **Testing**: All new features must include tests
 
 See [Backend/DEVELOPMENT.md](Backend/DEVELOPMENT.md) for detailed guidelines.
+
+## 📚 Documentation
+
+### Backend Technical Documentation
+- [Backend README](Backend/README.md) - API reference and integration guide
+- [Architecture](Backend/ARCHITECTURE.md) - System design and patterns
+- [Development Guide](Backend/DEVELOPMENT.md) - Contribution guidelines
+- [Key Rotation](Backend/KEY_ROTATION.md) - Encryption key management
+- [Log Levels](Backend/LOG-LEVELS.md) - Logging configuration
+- [Test Suite](Backend/src/__tests__/README.md) - Testing documentation
+
+### Frontend Documentation
+- [PowerShell CLI](FrontendPowershell/README.md) - Command-line interface
 
 ## 🔒 Security
 

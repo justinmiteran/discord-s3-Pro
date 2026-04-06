@@ -31,7 +31,14 @@ const mongodbRepository: IRepository = {
         });
 
         try {
-            client = await MongoClient.connect(database.mongoUri);
+            client = await MongoClient.connect(database.mongoUri, {
+                maxPoolSize: database.poolMax,
+                minPoolSize: database.poolMin,
+                connectTimeoutMS: database.connectTimeoutMs,
+                socketTimeoutMS: database.socketTimeoutMs,
+                serverSelectionTimeoutMS: database.serverSelectionTimeoutMs,
+                retryWrites: true,
+            });
             db = client.db();
 
             const duration = elapsed();
@@ -45,6 +52,8 @@ const mongodbRepository: IRepository = {
                 connectionTime: duration,
                 collections: stats.collections,
                 dataSize: `${(stats.dataSize / 1024 / 1024).toFixed(2)} MB`,
+                poolMax: database.poolMax,
+                poolMin: database.poolMin,
             });
         } catch (err) {
             logger.error('MongoDB connection failed', toError(err), {

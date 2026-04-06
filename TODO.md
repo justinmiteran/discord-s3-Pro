@@ -22,7 +22,7 @@
 - [x] Max file size validation (configurable limit)
 - [x] Prevent sensitive data from leaking into logs
 - [x] Encryption key rotation mechanism without data loss
-- [ ] MongoDB connection pool explicit configuration
+- [x] MongoDB connection pool explicit configuration
 
 ## 📅 Medium Term (1–2 months)
 

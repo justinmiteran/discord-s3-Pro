@@ -78,10 +78,17 @@ logger.debug('Server configuration loaded', {
  */
 export const database = {
     mongoUri: required(userConfig.Database?.mongo_uri, 'Database.mongo_uri'),
+    poolMax: parseInt(userConfig.Database?.pool_max || '10'),
+    poolMin: parseInt(userConfig.Database?.pool_min || '2'),
+    connectTimeoutMs: parseInt(userConfig.Database?.connect_timeout_ms || '5000'),
+    socketTimeoutMs: parseInt(userConfig.Database?.socket_timeout_ms || '30000'),
+    serverSelectionTimeoutMs: parseInt(userConfig.Database?.server_selection_timeout_ms || '5000'),
 };
 
 logger.debug('Database configuration loaded', {
     mongoUri: database.mongoUri.replace(/\/\/([^:]+):([^@]+)@/, '//$1:****@'),
+    poolMax: database.poolMax,
+    poolMin: database.poolMin,
 });
 
 /**

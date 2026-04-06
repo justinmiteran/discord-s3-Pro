@@ -1,4 +1,4 @@
-import logger from '../utils/logger.js';
+import logger, { startTimer } from '../utils/logger.js';
 import { toError } from '../utils/errors/AppError.js';
 import { QUEUE } from '../constants/index.js';
 
@@ -84,12 +84,12 @@ class QueueManager {
         }
 
         const { task, resolve, reject } = item;
-        const startTime = Date.now();
+        const elapsed = startTimer();
 
         try {
             const result = await task();
             this.totalTasksHandled++;
-            const duration = Date.now() - startTime;
+            const duration = elapsed();
 
             if (result && (result as any).headers) {
                 const remaining = (result as any).headers['x-ratelimit-remaining'];

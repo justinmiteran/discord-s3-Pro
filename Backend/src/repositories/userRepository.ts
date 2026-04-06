@@ -1,5 +1,6 @@
 import { Db, ObjectId } from 'mongodb';
 import { UserData, RefreshTokenData } from '../types/models/user.model.js';
+import { DatabaseError } from '../utils/errors/AppError.js';
 
 let db: Db | null = null;
 
@@ -8,7 +9,7 @@ export const initUserRepository = (database: Db): void => {
 };
 
 const getDb = (): Db => {
-    if (!db) throw new Error('User repository not initialized');
+    if (!db) throw new DatabaseError('User repository not initialized');
     return db;
 };
 

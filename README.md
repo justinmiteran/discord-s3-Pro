@@ -10,13 +10,14 @@ A professional-grade, decentralized cloud storage solution that leverages Discor
 
 ## 🎯 Key Features
 
-- **🔐 Military-Grade Encryption**: AES-256-GCM encryption for all data
+- **🔐 Military-Grade Encryption**: AES-256-GCM encryption with modular crypto architecture
+- **🔑 Seamless Key Rotation**: Zero-downtime encryption key updates with lazy re-encryption
 - **📦 Intelligent Compression**: Gzip compression reduces storage footprint
 - **⚡ Stream Processing**: Memory-efficient handling of files of any size
 - **🔄 Load Balancing**: Multi-channel distribution for optimal performance
 - **🛡️ Data Integrity**: SHA-256 hashing ensures file consistency
 - **♻️ Smart Deduplication**: Automatic detection and reuse of identical files
-- **🗄️ Flexible Storage**: MongoDB or JSON-based metadata storage
+- **🗄️ MongoDB Storage**: Reliable and scalable metadata storage
 - **🚦 Rate Limit Management**: Intelligent queue system for API compliance
 - **🐳 Docker Ready**: Full containerization support
 
@@ -53,10 +54,10 @@ A professional-grade, decentralized cloud storage solution that leverages Discor
                        │
         ┌──────────────┼──────────────┐
         ▼              ▼               ▼
-┌──────────────┐ ┌──────────┐ ┌──────────────┐
-│   MongoDB    │ │  Discord │ │  JSON Store  │
-│  (Metadata)  │ │  (Chunks)│ │  (Metadata)  │
-└──────────────┘ └──────────┘ └──────────────┘
+┌──────────────┐ ┌──────────┐
+│   MongoDB    │ │  Discord │
+│  (Metadata)  │ │  (Chunks)│
+└──────────────┘ └──────────┘
 ```
 
 ### Data Model
@@ -80,7 +81,7 @@ The system uses a **two-layer architecture** for clean separation of concerns:
 2. If duplicate: Reuse existing ChunkRegistry (instant upload, refCount++)
 3. If new: Compression (gzip) → Chunking (8MB) → Encryption (AES-256-GCM)
 4. Encrypted chunks → Queue → Discord channels
-5. Create ChunkRegistry (refCount=1) → Create FileData → Database (MongoDB/JSON)
+5. Create ChunkRegistry (refCount=1) → Create FileData → MongoDB
 
 **Download Process:**
 1. Fetch FileData from database
@@ -126,7 +127,6 @@ port = 3000
 chunk_size = 8388608
 
 [Database]
-db_type = mongodb
 mongo_uri = mongodb://db:27017/discord-s3
 
 [Discord]
@@ -169,6 +169,10 @@ storageBot/
 │   ├── src/
 │   │   ├── api/               # REST endpoints
 │   │   ├── core/              # Business logic
+│   │   │   ├── crypto/        # Encryption module (Cipher, KeyManager, EncryptionService)
+│   │   │   ├── discord/       # Discord operations
+│   │   │   ├── reencryption/  # Key rotation
+│   │   │   └── storage/       # File operations
 │   │   ├── pipeline/          # Data transformation
 │   │   ├── repositories/      # Data persistence
 │   │   ├── types/             # TypeScript definitions
@@ -214,9 +218,7 @@ port = 3000                    # API server port
 chunk_size = 8388608           # 8MB chunks
 
 [Database]
-db_type = mongodb              # mongodb or json
 mongo_uri = mongodb://db:27017/discord-s3
-# db_path = data/registry.json # For JSON mode
 
 [Discord]
 storage_channels = ID1,ID2,ID3 # Comma-separated channel IDs
@@ -284,10 +286,10 @@ See [Backend/README.md](Backend/README.md) for detailed API documentation.
 ### Testing
 
 Comprehensive test suite with strict coverage thresholds:
-- **249 tests** across unit, integration, and E2E levels
+- **205 tests** across unit, integration, and E2E levels
 - **Coverage thresholds**: 80% statements, 75% branches, 80% functions
 - **Test categories**:
-  - Unit tests: Core business logic, data processing, infrastructure, deduplication
+  - Unit tests: Core business logic, crypto operations, data processing, infrastructure
   - Integration tests: HTTP endpoints, route handlers
   - E2E tests: Full application stack
 
@@ -320,7 +322,9 @@ See [Backend/DEVELOPMENT.md](Backend/DEVELOPMENT.md) for detailed guidelines.
 
 ### Encryption
 - **Algorithm**: AES-256-GCM (Galois/Counter Mode)
-- **Key Management**: Environment variables only
+- **Architecture**: Modular 3-layer design (Cipher, KeyManager, EncryptionService)
+- **Key Management**: Environment variables with support for active and legacy keys
+- **Key Rotation**: Seamless updates with lazy re-encryption on file access
 - **Scope**: All data encrypted before leaving the system
 
 ### Integrity
@@ -378,7 +382,7 @@ Access Mongo Express at `http://localhost:8081`
 
 - Use multiple Discord channels (3-5 recommended)
 - Adjust `chunk_size` based on network speed
-- Use MongoDB for production (faster than JSON)
+- Use multiple Discord channels for better load distribution
 - Monitor queue length in logs
 
 ## 🤝 Contributing

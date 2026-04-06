@@ -86,6 +86,11 @@ Backend/
 │   │   └── validation/         # Request schemas
 │   ├── core/                   # Business logic
 │   │   ├── auth/               # Authentication service
+│   │   ├── crypto/             # Encryption module
+│   │   │   ├── cipher.ts       # Low-level AES-256-GCM operations
+│   │   │   ├── keyManager.ts   # Key loading and management
+│   │   │   ├── encryptionService.ts # High-level orchestration
+│   │   │   └── index.ts        # Module exports
 │   │   ├── discord/            # Discord operations
 │   │   │   ├── bot.ts          # Discord client
 │   │   │   ├── channelPool.ts  # Load balancing
@@ -97,13 +102,10 @@ Backend/
 │   │   │   ├── storageEngine.ts # Upload/download orchestration
 │   │   │   └── deleter.ts      # File deletion
 │   │   ├── database.ts         # Repository pattern
-│   │   ├── keyRotation.ts      # Encryption key management
 │   │   └── queueManager.ts     # Rate limit management
 │   ├── pipeline/               # Data transformation
-│   │   ├── chunker.ts          # File splitting
-│   │   └── encryptStream.ts    # AES-256-GCM encryption
+│   │   └── chunker.ts          # File splitting
 │   ├── repositories/           # Data persistence
-│   │   ├── jsonRepository.ts   # JSON storage
 │   │   ├── mongodbRepository.ts # MongoDB storage
 │   │   └── userRepository.ts   # User authentication
 │   ├── types/                  # TypeScript definitions
@@ -159,6 +161,7 @@ export default router;
 // src/core/myService.ts
 import logger from '../utils/logger.js';
 import { Client } from 'discord.js';
+import { encryptionService } from './crypto/index.js';
 
 /**
  * Description of what this service does
@@ -168,6 +171,8 @@ import { Client } from 'discord.js';
  */
 export const myFunction = async (client: Client, param1: string): Promise<void> => {
     logger.info('Starting operation', { param1 });
+    // Use encryption service if needed
+    const encrypted = await encryptionService.encryptWithActiveKey(Buffer.from(param1));
     // Implementation
 };
 ```
@@ -207,7 +212,7 @@ export interface IRepository {
 
 ### Running Tests
 ```bash
-# Run all tests (249 tests)
+# Run all tests (205 tests)
 npm test
 
 # Run with coverage report
@@ -281,6 +286,7 @@ Check `logs/app.log` and `logs/error.log` for detailed information.
 **Issue**: "Encryption key 'vX' not found"
 - **Solution**: Add missing legacy key to environment variables
 - **See**: [KEY_ROTATION.md](KEY_ROTATION.md) for key rotation guide
+- **Note**: The new crypto architecture uses `encryptionService` from `core/crypto/index.js`
 
 **Issue**: Tests failing after changes
 - **Solution**: Update mocks in `src/__tests__/helpers/`

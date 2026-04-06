@@ -545,7 +545,7 @@ npm run build
 - `npm run dev` - Start development server with hot reload
 - `npm run build` - Compile TypeScript to JavaScript
 - `npm start` - Run production build
-- `npm test` - Run test suite (249 tests)
+- `npm test` - Run test suite (205 tests)
 - `npm run test:coverage` - Generate coverage report
 - `npm run lint` - Check code quality
 - `npm run lint:fix` - Auto-fix linting issues
@@ -593,6 +593,7 @@ All API errors follow a consistent format:
 ### Data Protection
 
 - **Encryption**: AES-256-GCM for all data before upload
+- **Architecture**: Modular 3-layer crypto system (Cipher, KeyManager, EncryptionService)
 - **Hashing**: SHA-256 for integrity verification
 - **Key Rotation**: Seamless encryption key updates with lazy re-encryption
 - **Authentication**: JWT-based with refresh token rotation

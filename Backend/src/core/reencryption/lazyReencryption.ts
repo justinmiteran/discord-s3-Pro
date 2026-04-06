@@ -1,8 +1,8 @@
 import { Client } from 'discord.js';
 import { getRepository } from '../database.js';
-import { keyRotationManager } from '../keyRotation.js';
+import { encryptionService } from '../crypto/index.js';
 import { TaskPriority } from '../queueManager.js';
-import logger from '../../utils/logger.js';
+import logger, { startTimer } from '../../utils/logger.js';
 import { ChunkRegistry } from '../../types/models/file.model.js';
 import { DiscordChunkManager } from '../discord/discordChunkManager.js';
 
@@ -23,14 +23,10 @@ export class LazyReencryptionService {
     }
     /**
      * Checks if a ChunkRegistry needs re-encryption
+     * Delegates to EncryptionService for centralized key logic
      */
     needsReencryption(registry: ChunkRegistry): boolean {
-        if (!registry.encryptionKeyId) {
-            return true;
-        }
-
-        const activeKey = keyRotationManager.getActiveKey();
-        return registry.encryptionKeyId !== activeKey.id;
+        return encryptionService.needsReencryption(registry.encryptionKeyId);
     }
 
     /**
@@ -55,13 +51,13 @@ export class LazyReencryptionService {
             this.initialize(client);
         }
 
-        const startTime = Date.now();
-        const activeKey = keyRotationManager.getActiveKey();
+        const elapsed = startTimer();
+        const activeKeyId = encryptionService.getActiveKeyId();
 
         logger.info('Starting lazy re-encryption', {
             registryId: registry.id,
             oldKeyId: registry.encryptionKeyId || 'unknown',
-            newKeyId: activeKey.id,
+            newKeyId: activeKeyId,
             chunks: registry.chunks.length,
             refCount: registry.refCount,
             context,
@@ -101,7 +97,7 @@ export class LazyReencryptionService {
 
             // Step 3: Update registry with new chunks and encryption key (preserves refCount atomically)
             const repo = getRepository();
-            await repo.updateChunkRegistryData(registry.id, newChunksMetadata, activeKey.id);
+            await repo.updateChunkRegistryData(registry.id, newChunksMetadata, activeKeyId);
 
             logger.info('Registry updated successfully, deleting old chunks from Discord', {
                 registryId: registry.id,
@@ -114,7 +110,7 @@ export class LazyReencryptionService {
                 TaskPriority.LOW,
             );
 
-            const duration = Date.now() - startTime;
+            const duration = elapsed();
             logger.success('Lazy re-encryption completed', {
                 registryId: registry.id,
                 chunks: newChunksMetadata.length,
@@ -128,7 +124,7 @@ export class LazyReencryptionService {
 
             return registry.id;
         } catch (err: any) {
-            const duration = Date.now() - startTime;
+            const duration = elapsed();
             logger.error('Lazy re-encryption failed', err, {
                 registryId: registry.id,
                 context,

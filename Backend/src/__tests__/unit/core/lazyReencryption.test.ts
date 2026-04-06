@@ -2,10 +2,21 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { LazyReencryptionService } from '../../../core/reencryption/lazyReencryption.js';
 import { ChunkRegistry } from '../../../types/models/file.model.js';
 
-vi.mock('../../../core/keyRotation.js', () => ({
-    keyRotationManager: {
-        getActiveKey: vi.fn(() => ({ id: 'current', key: Buffer.alloc(32, 'new-key') })),
-        getKeyById: vi.fn((id: string) => Buffer.alloc(32, id)),
+vi.mock('../../../core/crypto/index.js', () => ({
+    encryptionService: {
+        getActiveKeyId: vi.fn(() => 'current'),
+        needsReencryption: vi.fn((keyId?: string) => {
+            if (!keyId) return true;
+            return keyId !== 'current';
+        }),
+        encryptWithActiveKey: vi.fn((data: Buffer) => ({
+            encrypted: Buffer.concat([Buffer.from('encrypted:'), data]),
+            keyId: 'current',
+        })),
+        decrypt: vi.fn((data: Buffer) => ({
+            decrypted: Buffer.from('decrypted-data'),
+            keyId: 'v1',
+        })),
     },
 }));
 

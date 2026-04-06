@@ -1,9 +1,8 @@
 import { Client } from 'discord.js';
 import { TaskPriority } from '../queueManager.js';
-import logger from '../../utils/logger.js';
+import logger, { startTimer } from '../../utils/logger.js';
 import { getRepository } from '../database.js';
-import { DISCORD_ERROR_CODES } from '../../constants/index.js';
-import { NotFoundError, toError } from '../../utils/errors/AppError.js';
+import { NotFoundError } from '../../utils/errors/AppError.js';
 import { DiscordChunkManager } from '../discord/discordChunkManager.js';
 
 /**
@@ -15,7 +14,7 @@ import { DiscordChunkManager } from '../discord/discordChunkManager.js';
  * @throws NotFoundError if file is not found
  */
 export const deleteFile = async (client: Client, fileId: string): Promise<string> => {
-    const startTime = Date.now();
+    const elapsed = startTimer();
     const repo = getRepository();
     const file = await repo.getFile(fileId);
 
@@ -70,7 +69,7 @@ export const deleteFile = async (client: Client, fileId: string): Promise<string
         });
     }
 
-    const duration = Date.now() - startTime;
+    const duration = elapsed();
     logger.success('File deletion completed', {
         fileId,
         fileName: file.name,

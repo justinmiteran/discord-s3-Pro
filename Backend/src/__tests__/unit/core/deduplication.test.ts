@@ -2,18 +2,18 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { Client } from 'discord.js';
 import { Readable } from 'stream';
 
-vi.mock('../../../core/keyRotation.js', () => ({
-    keyRotationManager: {
-        getActiveKey: vi.fn(() => ({ id: 'test-key', key: Buffer.alloc(32) })),
-        getKeyById: vi.fn(() => Buffer.alloc(32)),
+vi.mock('../../../core/crypto/index.js', () => ({
+    encryptionService: {
+        getActiveKeyId: vi.fn(() => 'test-key'),
+        needsReencryption: vi.fn(() => false),
         encryptWithActiveKey: vi.fn((data: Buffer) => {
             const iv = Buffer.alloc(16);
             const tag = Buffer.alloc(16);
             return { encrypted: Buffer.concat([iv, tag, data]), keyId: 'test-key' };
         }),
-        tryDecryptWithAllKeys: vi.fn((fullBuffer: Buffer) => {
+        decrypt: vi.fn((fullBuffer: Buffer) => {
             const data = fullBuffer.subarray(32);
-            return { data, keyId: 'test-key' };
+            return { decrypted: data, keyId: 'test-key' };
         }),
     },
 }));

@@ -6,6 +6,16 @@ The key rotation mechanism allows you to change encryption keys without losing a
 
 ## How It Works
 
+### Crypto Architecture
+
+The system uses a modular 3-layer encryption architecture:
+
+1. **Cipher** (`core/crypto/cipher.ts`): Low-level AES-256-GCM operations
+2. **KeyManager** (`core/crypto/keyManager.ts`): Key loading, validation, and management
+3. **EncryptionService** (`core/crypto/encryptionService.ts`): High-level orchestration
+
+This separation follows SOLID principles and eliminates code duplication.
+
 ### Key Storage Format
 
 Keys are stored in environment variables with the format `id:key`:
@@ -29,6 +39,8 @@ ENCRYPTION_KEY_LEGACY=v1:old_key_32_characters_long_here
 ### Lazy Re-encryption with Deduplication
 
 **Strategy**: Modify the `ChunkRegistry` in place when accessed.
+
+**Implementation**: The `EncryptionService` provides methods for checking if re-encryption is needed and performing decryption with fallback to legacy keys.
 
 When a file is downloaded or uploaded (deduplication):
 

@@ -74,34 +74,14 @@ logger.debug('Server configuration loaded', {
 });
 
 /**
- * Database configuration
+ * Database configuration - MongoDB only
  */
 export const database = {
-    type: required(userConfig.Database?.db_type, 'Database.db_type'),
-    mongoUri:
-        userConfig.Database?.db_type === 'mongodb'
-            ? required(userConfig.Database?.mongo_uri, 'Database.mongo_uri')
-            : null,
-    jsonPath:
-        userConfig.Database?.db_type === 'json'
-            ? path.resolve(ROOT_DIR, userConfig.Database?.db_path || 'data/registry.json')
-            : '',
-};
-
-/**
- * Auth database configuration — always MongoDB, independent of storage backend
- */
-export const auth = {
-    mongoUri: required(
-        userConfig.Auth?.mongo_uri ?? userConfig.Database?.mongo_uri,
-        'Auth.mongo_uri or Database.mongo_uri',
-    ),
+    mongoUri: required(userConfig.Database?.mongo_uri, 'Database.mongo_uri'),
 };
 
 logger.debug('Database configuration loaded', {
-    type: database.type,
-    hasMongoUri: !!database.mongoUri,
-    jsonPath: database.jsonPath,
+    mongoUri: database.mongoUri.replace(/\/\/([^:]+):([^@]+)@/, '//$1:****@'),
 });
 
 /**
@@ -121,7 +101,5 @@ logger.success('Configuration loaded successfully');
 export const token = discord.token;
 export const port = server.port;
 export const chunkSize = server.chunkSize;
-export const dbType = database.type;
 export const mongoUri = database.mongoUri;
-export const dbPath = database.jsonPath;
 export const channels = discord.channels;

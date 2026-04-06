@@ -353,5 +353,14 @@ process.on('beforeExit', () => {
     logger.close();
 });
 
+/**
+ * Returns a function that computes elapsed milliseconds since the call.
+ * @example const elapsed = startTimer(); logger.info('done', { duration: elapsed() });
+ */
+export const startTimer = (): (() => number) => {
+    const start = Date.now();
+    return () => Date.now() - start;
+};
+
 export default logger;
 export { Logger };

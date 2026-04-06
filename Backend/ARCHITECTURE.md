@@ -53,6 +53,9 @@ Discord S3 Pro is a distributed cloud storage system that leverages Discord's in
   - Error handling
 
 ### 2. Core Services (`src/core/`)
+- **crypto/cipher.ts**: Low-level AES-256-GCM encryption/decryption operations
+- **crypto/keyManager.ts**: Encryption key loading, validation, and management
+- **crypto/encryptionService.ts**: High-level encryption orchestration layer
 - **storage/storageEngine.ts**: Orchestrates upload/download operations
 - **storage/deleter.ts**: Handles file deletion with deduplication support
 - **discord/discordChunkManager.ts**: Centralized Discord operations (upload, download, delete chunks)
@@ -61,12 +64,10 @@ Discord S3 Pro is a distributed cloud storage system that leverages Discord's in
 - **reencryption/lazyReencryption.ts**: Background re-encryption service
 - **reencryption/reencryptionScheduler.ts**: Triggers re-encryption when needed
 - **queueManager.ts**: Manages Discord API rate limits with priority system
-- **keyRotation.ts**: Encryption key management and rotation
 - **database.ts**: Repository pattern implementation
 
 ### 3. Pipeline Layer (`src/pipeline/`)
 - **chunker.ts**: Splits files into manageable chunks
-- **encryptStream.ts**: AES-256-GCM encryption/decryption
 
 ### 4. Repository Layer (`src/repositories/`)
 - **jsonRepository.ts**: File-based metadata storage
@@ -130,11 +131,12 @@ Discord S3 Pro is a distributed cloud storage system that leverages Discord's in
 ## Security Features
 
 1. **AES-256-GCM Encryption**: All chunks encrypted before upload
-2. **SHA-256 Hashing**: Integrity verification on download
-3. **Environment Variables**: Sensitive credentials isolated
-4. **No Plaintext Storage**: Data never stored unencrypted
-5. **Key Rotation Support**: Seamless encryption key updates with lazy re-encryption
-6. **Deduplication Security**: Reference counting prevents premature chunk deletion
+2. **Modular Crypto Architecture**: 3-layer design (Cipher, KeyManager, EncryptionService) following SOLID principles
+3. **SHA-256 Hashing**: Integrity verification on download
+4. **Environment Variables**: Sensitive credentials isolated
+5. **No Plaintext Storage**: Data never stored unencrypted
+6. **Key Rotation Support**: Seamless encryption key updates with lazy re-encryption
+7. **Deduplication Security**: Reference counting prevents premature chunk deletion
 
 ## Scalability Considerations
 

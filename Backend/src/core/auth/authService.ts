@@ -2,7 +2,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { randomUUID } from 'crypto';
 import { security } from '../../config/index.js';
-import { AuthError } from '../../utils/errors/AppError.js';
+import { AuthError, AppError } from '../../utils/errors/AppError.js';
 import * as userRepo from '../../repositories/userRepository.js';
 import logger from '../../utils/logger.js';
 
@@ -76,7 +76,7 @@ export const initAdmin = async (): Promise<void> => {
 
     if (!username || !password) {
         logger.fatal('ADMIN_USERNAME and ADMIN_PASSWORD must be set for first startup');
-        throw new Error('Missing admin credentials for initialization');
+        throw new AppError('Missing admin credentials for initialization', 500, false);
     }
 
     const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);

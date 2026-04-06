@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import { Transform, TransformCallback } from 'stream';
-import logger from './logger.js';
+import logger, { startTimer } from './logger.js';
 
 /**
  * Calculates SHA-256 hash of a file
@@ -10,7 +10,7 @@ import logger from './logger.js';
  */
 export const calculateHash = (filePath: string): Promise<string> =>
     new Promise((resolve, reject) => {
-        const startTime = Date.now();
+        const elapsed = startTimer();
         const hash = crypto.createHash('sha256');
         const input = fs.createReadStream(filePath);
         let bytesProcessed = 0;
@@ -27,7 +27,7 @@ export const calculateHash = (filePath: string): Promise<string> =>
         
         input.on('end', () => {
             const finalHash = hash.digest('hex');
-            const duration = Date.now() - startTime;
+            const duration = elapsed();
             
             logger.debug('Hash calculated', {
                 filePath,

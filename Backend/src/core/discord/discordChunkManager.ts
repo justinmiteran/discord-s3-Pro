@@ -1,6 +1,6 @@
 import { Client, TextChannel, AttachmentBuilder, Message } from 'discord.js';
 import axios from 'axios';
-import { encryptBuffer, decryptBuffer } from '../../pipeline/encryptStream.js';
+import { encryptionService } from '../crypto/index.js';
 import queue, { TaskPriority } from '../queueManager.js';
 import pool from './channelPool.js';
 import logger from '../../utils/logger.js';
@@ -33,7 +33,7 @@ export class DiscordChunkManager {
         priority: TaskPriority = TaskPriority.HIGH,
         namePrefix: string = 'chunk',
     ): Promise<ChunkMetadata> {
-        const { encrypted, keyId } = encryptBuffer(buffer);
+        const { encrypted, keyId } = encryptionService.encryptWithActiveKey(buffer);
         const channelId = pool.next();
 
         const result = await queue.add(async () => {
@@ -92,7 +92,7 @@ export class DiscordChunkManager {
         }
 
         const { data } = await axios.get(attachment.url, { responseType: 'arraybuffer' });
-        const { decrypted } = decryptBuffer(Buffer.from(data), encryptionKeyId);
+        const { decrypted } = encryptionService.decrypt(Buffer.from(data), encryptionKeyId);
 
         logger.debug('Chunk downloaded', {
             chunkIndex,

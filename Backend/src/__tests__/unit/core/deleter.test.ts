@@ -10,16 +10,14 @@ vi.mock('../../../config/index.js', () => ({
     channels: ['ch1', 'ch2'],
 }));
 
-vi.mock('../../../core/keyRotation.js', () => ({
-    keyRotationManager: {
-        getActiveKey: vi.fn(() => ({ id: 'key1', key: Buffer.alloc(32) })),
-        getKeyById: vi.fn(() => Buffer.alloc(32)),
+vi.mock('../../../core/crypto/index.js', () => ({
+    encryptionService: {
         encryptWithActiveKey: vi.fn((buffer: Buffer) => ({
             encrypted: buffer,
             keyId: 'key1',
         })),
-        tryDecryptWithAllKeys: vi.fn((buffer: Buffer) => ({
-            data: buffer,
+        decrypt: vi.fn((buffer: Buffer) => ({
+            decrypted: buffer,
             keyId: 'key1',
         })),
     },

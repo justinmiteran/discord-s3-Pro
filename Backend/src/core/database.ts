@@ -1,62 +1,43 @@
-import logger from '../utils/logger.js';
-import { database, auth } from '../config/index.js';
+import logger, { startTimer } from '../utils/logger.js';
+import { database } from '../config/index.js';
 import { IRepository } from '../types/interfaces/repository.interface.js';
-import { MongoClient } from 'mongodb';
 import { getDb } from '../repositories/mongodbRepository.js';
 import { initUserRepository, createIndexes } from '../repositories/userRepository.js';
 import { initAdmin } from './auth/authService.js';
-import { toError } from '../utils/errors/AppError.js';
+import { toError, DatabaseError } from '../utils/errors/AppError.js';
 
 let repository: IRepository | null = null;
 
-const initAuth = async (): Promise<void> => {
-    if (database.type === 'mongodb') {
-        initUserRepository(getDb());
-    } else {
-        logger.info('Storage is JSON — connecting dedicated MongoDB for auth', {
-            uri: auth.mongoUri.replace(/\/\/([^:]+):([^@]+)@/, '//$1:****@'),
-        });
-        const client = await MongoClient.connect(auth.mongoUri);
-        initUserRepository(client.db());
-    }
-    await createIndexes();
-    await initAdmin();
-};
-
 /**
- * Initializes the database repository based on configuration
- * Dynamically loads the appropriate repository implementation (MongoDB or JSON)
+ * Initializes the database repository (MongoDB only)
  * @throws Error if repository fails to load or connect
  */
 export const initDatabase = async (): Promise<void> => {
-    const startTime = Date.now();
+    const elapsed = startTimer();
 
     try {
-        logger.info('Initializing database', {
-            provider: database.type,
-        });
+        logger.info('Initializing MongoDB database');
 
-        const module = await import(`../repositories/${database.type}Repository.js`);
+        const module = await import('../repositories/mongodbRepository.js');
         repository = module.default || module;
 
         if (!repository) {
-            logger.fatal('Repository module failed to load', undefined, {
-                provider: database.type,
-            });
-            throw new Error('Repository module exports nothing.');
+            logger.fatal('MongoDB repository module failed to load');
+            throw new DatabaseError('Repository module exports nothing.');
         }
 
         await repository.connect();
-        await initAuth();
+        
+        initUserRepository(getDb());
+        await createIndexes();
+        await initAdmin();
 
-        const duration = Date.now() - startTime;
         logger.success('Database initialized', {
-            provider: database.type,
-            connectionTime: duration,
+            provider: 'mongodb',
+            connectionTime: elapsed(),
         });
     } catch (err) {
         logger.fatal('Database initialization failed', toError(err), {
-            provider: database.type,
             error: toError(err).message,
         });
         process.exit(1);
@@ -73,7 +54,7 @@ export const getRepository = (): IRepository => {
         logger.error('Repository not initialized', undefined, {
             action: 'getRepository',
         });
-        throw new Error('Database repository not initialized');
+        throw new DatabaseError('Database repository not initialized');
     }
     return repository;
 };

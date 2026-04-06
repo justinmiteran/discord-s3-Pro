@@ -2,14 +2,14 @@ import { MongoClient, Db } from 'mongodb';
 import { database } from '../config/index.js';
 import { IRepository } from '../types/interfaces/repository.interface.js';
 import { FileData, ChunkRegistry } from '../types/models/file.model.js';
-import { toError } from '../utils/errors/AppError.js';
-import logger from '../utils/logger.js';
+import { toError, DatabaseError, NotFoundError } from '../utils/errors/AppError.js';
+import logger, { startTimer } from '../utils/logger.js';
 
 let db: Db | null = null;
 let client: MongoClient | null = null;
 
 export const getDb = (): Db => {
-    if (!db) throw new Error('MongoDB not connected');
+    if (!db) throw new DatabaseError('MongoDB not connected');
     return db;
 };
 
@@ -22,10 +22,10 @@ const mongodbRepository: IRepository = {
             logger.fatal('MongoDB URI not defined', undefined, {
                 config: 'database.mongoUri',
             });
-            throw new Error('MONGODB_URI is not defined');
+            throw new DatabaseError('MONGODB_URI is not defined');
         }
 
-        const startTime = Date.now();
+        const elapsed = startTimer();
         logger.info('Connecting to MongoDB', {
             uri: database.mongoUri.replace(/\/\/([^:]+):([^@]+)@/, '//$1:****@'),
         });
@@ -34,7 +34,7 @@ const mongodbRepository: IRepository = {
             client = await MongoClient.connect(database.mongoUri);
             db = client.db();
 
-            const duration = Date.now() - startTime;
+            const duration = elapsed();
             const stats = await db.stats();
 
             await db.collection('chunk_registry').createIndex({ hash: 1 });
@@ -59,7 +59,7 @@ const mongodbRepository: IRepository = {
             logger.error('MongoDB not connected', undefined, {
                 operation: 'saveFile',
             });
-            throw new Error('Database not connected');
+            throw new DatabaseError('Database not connected');
         }
 
         logger.debug('Saving file to MongoDB', {
@@ -87,7 +87,7 @@ const mongodbRepository: IRepository = {
             logger.error('MongoDB not connected', undefined, {
                 operation: 'getFile',
             });
-            throw new Error('Database not connected');
+            throw new DatabaseError('Database not connected');
         }
 
         logger.debug('Retrieving file from MongoDB', { fileId });
@@ -115,7 +115,7 @@ const mongodbRepository: IRepository = {
             logger.error('MongoDB not connected', undefined, {
                 operation: 'listFiles',
             });
-            throw new Error('Database not connected');
+            throw new DatabaseError('Database not connected');
         }
 
         logger.debug('Listing all files from MongoDB');
@@ -143,7 +143,7 @@ const mongodbRepository: IRepository = {
             logger.error('MongoDB not connected', undefined, {
                 operation: 'deleteFile',
             });
-            throw new Error('Database not connected');
+            throw new DatabaseError('Database not connected');
         }
 
         logger.debug('Deleting file from MongoDB', { fileId });
@@ -165,7 +165,7 @@ const mongodbRepository: IRepository = {
     async saveChunkRegistry(registry: ChunkRegistry) {
         if (!db) {
             logger.error('MongoDB not connected', undefined, { operation: 'saveChunkRegistry' });
-            throw new Error('Database not connected');
+            throw new DatabaseError('Database not connected');
         }
 
         logger.debug('Saving chunk registry to MongoDB', { registryId: registry.id, hash: registry.hash });
@@ -187,7 +187,7 @@ const mongodbRepository: IRepository = {
     async updateChunkRegistryData(registryId: string, chunks: ChunkRegistry['chunks'], encryptionKeyId: string) {
         if (!db) {
             logger.error('MongoDB not connected', undefined, { operation: 'updateChunkRegistryData' });
-            throw new Error('Database not connected');
+            throw new DatabaseError('Database not connected');
         }
 
         logger.debug('Updating chunk registry data (chunks + encryptionKeyId only)', { 
@@ -209,7 +209,7 @@ const mongodbRepository: IRepository = {
 
             if (result.matchedCount === 0) {
                 logger.error('Cannot update chunk registry: not found', undefined, { registryId });
-                throw new Error(`Chunk registry ${registryId} not found`);
+                throw new NotFoundError(`Chunk registry ${registryId}`);
             }
 
             logger.debug('Chunk registry data updated', { registryId });
@@ -222,7 +222,7 @@ const mongodbRepository: IRepository = {
     async getChunkRegistry(registryId: string) {
         if (!db) {
             logger.error('MongoDB not connected', undefined, { operation: 'getChunkRegistry' });
-            throw new Error('Database not connected');
+            throw new DatabaseError('Database not connected');
         }
 
         logger.debug('Retrieving chunk registry from MongoDB', { registryId });
@@ -246,7 +246,7 @@ const mongodbRepository: IRepository = {
     async getChunkRegistryByHash(hash: string) {
         if (!db) {
             logger.error('MongoDB not connected', undefined, { operation: 'getChunkRegistryByHash' });
-            throw new Error('Database not connected');
+            throw new DatabaseError('Database not connected');
         }
 
         logger.debug('Retrieving chunk registry by hash from MongoDB', { hash });
@@ -270,7 +270,7 @@ const mongodbRepository: IRepository = {
     async incrementChunkRegistryRefCount(registryId: string) {
         if (!db) {
             logger.error('MongoDB not connected', undefined, { operation: 'incrementChunkRegistryRefCount' });
-            throw new Error('Database not connected');
+            throw new DatabaseError('Database not connected');
         }
 
         logger.debug('Incrementing refCount for chunk registry', { registryId });
@@ -283,7 +283,7 @@ const mongodbRepository: IRepository = {
 
             if (result.matchedCount === 0) {
                 logger.error('Cannot increment refCount: chunk registry not found', undefined, { registryId });
-                throw new Error(`Chunk registry ${registryId} not found`);
+                throw new NotFoundError(`Chunk registry ${registryId}`);
             }
 
             logger.debug('RefCount incremented', { registryId });
@@ -296,7 +296,7 @@ const mongodbRepository: IRepository = {
     async decrementChunkRegistryRefCount(registryId: string): Promise<number> {
         if (!db) {
             logger.error('MongoDB not connected', undefined, { operation: 'decrementChunkRegistryRefCount' });
-            throw new Error('Database not connected');
+            throw new DatabaseError('Database not connected');
         }
 
         logger.debug('Decrementing refCount for chunk registry', { registryId });
@@ -310,7 +310,7 @@ const mongodbRepository: IRepository = {
 
             if (!result) {
                 logger.error('Cannot decrement refCount: chunk registry not found', undefined, { registryId });
-                throw new Error(`Chunk registry ${registryId} not found`);
+                throw new NotFoundError(`Chunk registry ${registryId}`);
             }
 
             const newRefCount = Math.max(result.refCount || 0, 0);
@@ -325,7 +325,7 @@ const mongodbRepository: IRepository = {
     async deleteChunkRegistry(registryId: string) {
         if (!db) {
             logger.error('MongoDB not connected', undefined, { operation: 'deleteChunkRegistry' });
-            throw new Error('Database not connected');
+            throw new DatabaseError('Database not connected');
         }
 
         logger.debug('Deleting chunk registry from MongoDB', { registryId });

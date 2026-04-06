@@ -8,10 +8,16 @@ import { Client } from 'discord.js';
  * Tests real HTTP endpoints with mocked external dependencies (Discord, MongoDB)
  */
 
-vi.mock('../../core/keyRotation.js', () => ({
-    keyRotationManager: {
-        getActiveKey: vi.fn(() => ({ id: 'test-key', key: Buffer.alloc(32) })),
-        getKeyById: vi.fn(() => Buffer.alloc(32)),
+vi.mock('../../core/crypto/index.js', () => ({
+    encryptionService: {
+        encryptWithActiveKey: vi.fn((data: Buffer) => ({
+            encrypted: data,
+            keyId: 'test-key',
+        })),
+        decrypt: vi.fn((data: Buffer) => ({
+            decrypted: data,
+            keyId: 'test-key',
+        })),
     },
 }));
 

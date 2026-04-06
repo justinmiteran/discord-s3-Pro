@@ -1,5 +1,6 @@
 import { channels } from '../../config/index.js';
 import { ERROR_CODES } from '../../constants/index.js';
+import { DiscordError } from '../../utils/errors/AppError.js';
 
 /**
  * Manages round-robin distribution of Discord channels for load balancing
@@ -20,7 +21,7 @@ class ChannelPool {
      */
     public next(): string {
         if (this.channels.length === 0) {
-            throw new Error(ERROR_CODES.NO_CHANNELS);
+            throw new DiscordError(ERROR_CODES.NO_CHANNELS);
         }
         const id = this.channels[this.currentIndex];
         this.currentIndex = (this.currentIndex + 1) % this.channels.length;

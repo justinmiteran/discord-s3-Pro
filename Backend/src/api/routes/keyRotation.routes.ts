@@ -1,5 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { keyRotationManager } from '../../core/keyRotation.js';
+import { encryptionService } from '../../core/crypto/index.js';
 
 export const createKeyRotationRoutes = (): Router => {
     const router = Router();
@@ -41,7 +41,7 @@ export const createKeyRotationRoutes = (): Router => {
      */
     router.get('/admin/keys', (req: Request, res: Response, next: NextFunction) => {
         try {
-            const keys = keyRotationManager.listKeys();
+            const keys = encryptionService.listKeys();
             res.json({ keys });
         } catch (err) {
             next(err);

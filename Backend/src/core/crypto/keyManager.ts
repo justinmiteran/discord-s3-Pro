@@ -1,7 +1,6 @@
-import crypto from 'crypto';
-import logger from '../utils/logger.js';
-import { ENCRYPTION } from '../constants/index.js';
-import { EncryptionError } from '../utils/errors/AppError.js';
+import logger from '../../utils/logger.js';
+import { ENCRYPTION } from '../../constants/index.js';
+import { EncryptionError } from '../../utils/errors/AppError.js';
 
 /**
  * Encryption key with metadata
@@ -18,10 +17,21 @@ export interface EncryptionKeyEntry {
 }
 
 /**
- * Key rotation manager
- * Supports multiple encryption keys for seamless rotation without data loss
+ * Key Manager - Encryption key management
+ * 
+ * RESPONSIBILITIES:
+ * - Load keys from environment variables
+ * - Store keys in memory
+ * - Provide access to keys (active, legacy)
+ * - Validate keys
+ * - Determine if a key needs rotation
+ * 
+ * DOES NOT:
+ * - Encrypt/decrypt data (→ Cipher)
+ * - Handle business logic (→ callers)
+ * - Manage error handling beyond validation (→ callers)
  */
-export class KeyRotationManager {
+export class KeyManager {
     private keys: Map<string, EncryptionKeyEntry> = new Map();
     private activeKeyId: string | null = null;
 
@@ -43,13 +53,15 @@ export class KeyRotationManager {
     private loadKeysFromEnv(): void {
         const activeKeyStr = process.env.ENCRYPTION_KEY_ACTIVE;
         if (!activeKeyStr) {
-            throw new Error('ENCRYPTION_KEY_ACTIVE is required (format: "id:key")');
+            throw new EncryptionError('ENCRYPTION_KEY_ACTIVE is required (format: "id:key")');
         }
 
         // Parse active key
         const activeKeyParts = activeKeyStr.split(':');
         if (activeKeyParts.length !== 2) {
-            throw new Error('ENCRYPTION_KEY_ACTIVE must be in format "id:key" (e.g., "v2:actual_key_here")');
+            throw new EncryptionError(
+                'ENCRYPTION_KEY_ACTIVE must be in format "id:key" (e.g., "v2:actual_key_here")',
+            );
         }
 
         const [activeId, activeKey] = activeKeyParts;
@@ -61,8 +73,11 @@ export class KeyRotationManager {
         // Parse legacy keys
         const legacyKeysStr = process.env.ENCRYPTION_KEY_LEGACY;
         if (legacyKeysStr) {
-            const legacyKeyEntries = legacyKeysStr.split(',').map(k => k.trim()).filter(k => k);
-            
+            const legacyKeyEntries = legacyKeysStr
+                .split(',')
+                .map((k) => k.trim())
+                .filter((k) => k);
+
             for (const entry of legacyKeyEntries) {
                 const parts = entry.split(':');
                 if (parts.length !== 2) {
@@ -76,7 +91,7 @@ export class KeyRotationManager {
             }
         }
 
-        logger.success('Key rotation manager initialized', {
+        logger.success('Key manager initialized', {
             totalKeys: this.keys.size,
             activeKey: this.activeKeyId,
             availableKeys: Array.from(this.keys.keys()),
@@ -88,7 +103,7 @@ export class KeyRotationManager {
      */
     private addKey(id: string, key: Buffer, active: boolean): void {
         if (key.length !== ENCRYPTION.KEY_LENGTH) {
-            throw new Error(`Key ${id} must be exactly ${ENCRYPTION.KEY_LENGTH} bytes`);
+            throw new EncryptionError(`Key ${id} must be exactly ${ENCRYPTION.KEY_LENGTH} bytes`);
         }
 
         this.keys.set(id, {
@@ -101,6 +116,8 @@ export class KeyRotationManager {
 
     /**
      * Gets the active encryption key for new data
+     * @returns Active key with ID and buffer
+     * @throws EncryptionError if no active key is configured
      */
     getActiveKey(): { id: string; key: Buffer } {
         if (!this.activeKeyId) {
@@ -116,7 +133,22 @@ export class KeyRotationManager {
     }
 
     /**
+     * Gets the active key ID
+     * @returns The active key identifier
+     * @throws EncryptionError if no active key is configured
+     */
+    getActiveKeyId(): string {
+        if (!this.activeKeyId) {
+            throw new EncryptionError('No active encryption key configured');
+        }
+        return this.activeKeyId;
+    }
+
+    /**
      * Gets a specific key by ID for decryption
+     * @param keyId - Key identifier
+     * @returns Key buffer
+     * @throws EncryptionError if key not found
      */
     getKeyById(keyId: string): Buffer {
         const keyEntry = this.keys.get(keyId);
@@ -127,88 +159,42 @@ export class KeyRotationManager {
     }
 
     /**
-     * Attempts to decrypt with all available keys (fallback mechanism)
+     * Checks if a key exists
+     * @param keyId - Key identifier
+     * @returns True if key exists
      */
-    tryDecryptWithAllKeys(fullBuffer: Buffer): { data: Buffer; keyId: string } {
-        const errors: string[] = [];
+    hasKey(keyId: string): boolean {
+        return this.keys.has(keyId);
+    }
 
-        // Try active key first
-        if (this.activeKeyId) {
-            try {
-                const data = this.decryptWithKey(fullBuffer, this.activeKeyId);
-                return { data, keyId: this.activeKeyId };
-            } catch (err: any) {
-                errors.push(`${this.activeKeyId}: ${err.message}`);
-            }
+    /**
+     * Gets all available key IDs
+     * @returns Array of key IDs
+     */
+    getAvailableKeyIds(): string[] {
+        return Array.from(this.keys.keys());
+    }
+
+    /**
+     * Checks if data encrypted with given key needs re-encryption
+     * @param currentKeyId - The key ID currently used for encryption
+     * @returns True if re-encryption is needed, false otherwise
+     */
+    needsReencryption(currentKeyId?: string): boolean {
+        if (!currentKeyId) {
+            return true; // No key ID = needs encryption
         }
 
-        // Try all other keys
-        for (const [keyId, keyEntry] of this.keys.entries()) {
-            if (keyId === this.activeKeyId) continue;
-
-            try {
-                const data = this.decryptWithKey(fullBuffer, keyId);
-                logger.warn('Decrypted with legacy key', { keyId });
-                return { data, keyId };
-            } catch (err: any) {
-                errors.push(`${keyId}: ${err.message}`);
-            }
+        if (!this.activeKeyId) {
+            return false; // No active key configured
         }
 
-        throw new EncryptionError(
-            `Failed to decrypt with any available key. Tried: ${errors.join(', ')}`,
-        );
+        return currentKeyId !== this.activeKeyId;
     }
 
     /**
-     * Decrypts data with a specific key
-     */
-    private decryptWithKey(fullBuffer: Buffer, keyId: string): Buffer {
-        const key = this.getKeyById(keyId);
-        const iv = fullBuffer.subarray(0, ENCRYPTION.IV_LENGTH);
-        const tag = fullBuffer.subarray(
-            ENCRYPTION.IV_LENGTH,
-            ENCRYPTION.IV_LENGTH + ENCRYPTION.AUTH_TAG_LENGTH,
-        );
-        const data = fullBuffer.subarray(ENCRYPTION.IV_LENGTH + ENCRYPTION.AUTH_TAG_LENGTH);
-
-        const decipher = crypto.createDecipheriv(ENCRYPTION.ALGORITHM, key, iv);
-        decipher.setAuthTag(tag);
-        return Buffer.concat([decipher.update(data), decipher.final()]);
-    }
-
-    /**
-     * Encrypts data with the active key
-     */
-    encryptWithActiveKey(buffer: Buffer): { encrypted: Buffer; keyId: string } {
-        const { id, key } = this.getActiveKey();
-
-        const iv = crypto.randomBytes(ENCRYPTION.IV_LENGTH);
-        const cipher = crypto.createCipheriv(ENCRYPTION.ALGORITHM, key, iv);
-        const encrypted = Buffer.concat([cipher.update(buffer), cipher.final()]);
-        const authTag = cipher.getAuthTag();
-
-        return {
-            encrypted: Buffer.concat([iv, authTag, encrypted]),
-            keyId: id,
-        };
-    }
-
-    /**
-     * Re-encrypts data from old key to active key
-     */
-    reencrypt(encryptedBuffer: Buffer, oldKeyId: string): Buffer {
-        // Decrypt with old key
-        const decrypted = this.decryptWithKey(encryptedBuffer, oldKeyId);
-
-        // Encrypt with active key
-        const { encrypted } = this.encryptWithActiveKey(decrypted);
-
-        return encrypted;
-    }
-
-    /**
-     * Lists all available keys
+     * Lists all available keys (without exposing actual key data)
+     * @returns Array of key metadata
      */
     listKeys(): Array<{ id: string; active: boolean; createdAt: string }> {
         return Array.from(this.keys.values()).map((entry) => ({
@@ -220,4 +206,4 @@ export class KeyRotationManager {
 }
 
 // Singleton instance
-export const keyRotationManager = new KeyRotationManager();
+export const keyManager = new KeyManager();

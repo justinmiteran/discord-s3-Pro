@@ -7,6 +7,8 @@
  * - EncryptionService: High-level encryption orchestration
  */
 
-export { Cipher, EncryptedComponents } from './cipher.js';
-export { KeyManager, EncryptionKeyEntry, keyManager } from './keyManager.js';
+export { Cipher } from './cipher.js';
+export type { EncryptedComponents } from './cipher.js';
+export { KeyManager, keyManager } from './keyManager.js';
+export type { EncryptionKeyEntry } from './keyManager.js';
 export { EncryptionService, encryptionService } from './encryptionService.js';

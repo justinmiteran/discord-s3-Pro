@@ -6,6 +6,7 @@ vi.mock('../../../config/index.js', () => ({
     server: { port: 3000, chunkSize: 8388608 },
     discord: { token: 'test', channels: [] },
     auth: { mongoUri: 'mongodb://localhost:27017/test' },
+    queue: { uploadConcurrency: 3, downloadConcurrency: 3 },
 }));
 
 vi.mock('../../../utils/logger.js');
@@ -25,7 +26,7 @@ describe('queueManager', () => {
         const module = await import('../../../core/queueManager.js');
         queueManager = module.default;
         (queueManager as any).queue = [];
-        (queueManager as any).processing = false;
+        (queueManager as any).activeWorkers = 0;
         (queueManager as any).totalTasksHandled = 0;
         (queueManager as any).rateLimitHits = 0;
     });
@@ -45,7 +46,8 @@ describe('queueManager', () => {
         expect(task).toHaveBeenCalledTimes(1);
     });
 
-    it('executes multiple tasks sequentially', async () => {
+    it('executes multiple tasks sequentially with concurrency=1', async () => {
+        (queueManager as any).concurrency = 1;
         const results: number[] = [];
         const task1 = vi.fn(async () => {
             results.push(1);
@@ -73,6 +75,7 @@ describe('queueManager', () => {
         expect(r2).toBe(2);
         expect(r3).toBe(3);
         expect(results).toEqual([1, 2, 3]);
+        (queueManager as any).concurrency = 3;
     });
 
     it('handles task rejection correctly', async () => {
@@ -105,7 +108,8 @@ describe('queueManager', () => {
         expect(task2).toHaveBeenCalledTimes(1);
     });
 
-    it('waits RATE_LIMIT_DELAY between tasks', async () => {
+    it('waits RATE_LIMIT_DELAY between tasks with concurrency=1', async () => {
+        (queueManager as any).concurrency = 1;
         const task1 = vi.fn().mockResolvedValue('first');
         const task2 = vi.fn().mockResolvedValue('second');
 
@@ -118,9 +122,11 @@ describe('queueManager', () => {
 
         await vi.advanceTimersByTimeAsync(200);
         expect(task2).toHaveBeenCalledTimes(1);
+        (queueManager as any).concurrency = 3;
     });
 
     it('warns when queue size exceeds 10', async () => {
+        (queueManager as any).concurrency = 1;
         vi.clearAllMocks();
         const slowTask = vi
             .fn()
@@ -136,6 +142,7 @@ describe('queueManager', () => {
                 queueSize: expect.any(Number),
             }),
         );
+        (queueManager as any).concurrency = 3;
     });
 
     it('returns queue statistics', () => {
@@ -145,8 +152,12 @@ describe('queueManager', () => {
         expect(stats).toHaveProperty('totalHandled');
         expect(stats).toHaveProperty('rateLimitHits');
         expect(stats).toHaveProperty('isProcessing');
+        expect(stats).toHaveProperty('activeWorkers');
+        expect(stats).toHaveProperty('concurrency');
         expect(typeof stats.queueSize).toBe('number');
         expect(typeof stats.totalHandled).toBe('number');
+        expect(typeof stats.activeWorkers).toBe('number');
+        expect(typeof stats.concurrency).toBe('number');
     });
 
     it('handles rate limit response headers', async () => {

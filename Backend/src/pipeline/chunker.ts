@@ -1,6 +1,5 @@
 import fs from 'fs';
 import { Transform, TransformCallback } from 'stream';
-import zlib from 'zlib';
 import logger from '../utils/logger.js';
 
 /**
@@ -68,18 +67,3 @@ export class ChunkSplitter extends Transform {
         callback();
     }
 }
-
-/**
- * Creates a compressed file read stream
- * @param filePath - Path to the file to read
- * @returns Readable stream with gzip compression
- */
-export const createUploadStream = (filePath: string): NodeJS.ReadableStream => {
-    const fileStream = fs.createReadStream(filePath);
-
-    fileStream.on('error', (err: Error) => {
-        logger.error('ReadStream error', err, { filePath });
-    });
-
-    return fileStream.pipe(zlib.createGzip({ level: zlib.constants.Z_BEST_COMPRESSION }));
-};

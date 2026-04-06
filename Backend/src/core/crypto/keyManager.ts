@@ -65,7 +65,7 @@ export class KeyManager {
         }
 
         const [activeId, activeKey] = activeKeyParts;
-        this.addKey(activeId, Buffer.alloc(32, activeKey), true);
+        this.addKey(activeId, this.parseKeyString(activeId, activeKey), true);
         this.activeKeyId = activeId;
 
         logger.info(`Loaded active encryption key: ${activeId}`);
@@ -86,7 +86,7 @@ export class KeyManager {
                 }
 
                 const [legacyId, legacyKey] = parts;
-                this.addKey(legacyId, Buffer.alloc(32, legacyKey), false);
+                this.addKey(legacyId, this.parseKeyString(legacyId, legacyKey), false);
                 logger.info(`Loaded legacy encryption key: ${legacyId}`);
             }
         }
@@ -96,6 +96,25 @@ export class KeyManager {
             activeKey: this.activeKeyId,
             availableKeys: Array.from(this.keys.keys()),
         });
+    }
+
+    /**
+     * Parses a key string into a 32-byte Buffer
+     * Requires at least 16 characters to prevent weak keys from silent padding
+     * @param id - Key identifier for error messages
+     * @param keyStr - Raw key string from environment
+     * @returns 32-byte Buffer (truncated or zero-padded)
+     * @throws EncryptionError if key string is too short
+     */
+    private parseKeyString(id: string, keyStr: string): Buffer {
+        if (keyStr.length < 16) {
+            throw new EncryptionError(
+                `Key '${id}' is too short (${keyStr.length} chars). Minimum 16 characters required.`,
+            );
+        }
+        const buf = Buffer.alloc(32);
+        Buffer.from(keyStr, 'utf8').copy(buf);
+        return buf;
     }
 
     /**

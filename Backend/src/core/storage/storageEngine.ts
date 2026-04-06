@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import zlib from 'zlib';
 import { Client } from 'discord.js';
 import { Response } from 'express';
-import { server } from '../../config/index.js';
+import { server, queue as queueConfig } from '../../config/index.js';
 import { encryptionService } from '../crypto/index.js';
 import { ChunkSplitter } from '../../pipeline/chunker.js';
 import { TaskPriority } from '../queueManager.js';
@@ -114,37 +114,43 @@ const createChunkUploadStream = (
     client: Client,
     originalName: string,
     chunksMetadata: ChunkMetadata[],
-    encryptionKeyIdRef: { value?: string },
 ): Writable => {
     const chunkManager = new DiscordChunkManager(client);
     let chunkSequence = 0;
+    const pendingUploads: Promise<void>[] = [];
+    const orderedResults: { index: number; metadata: ChunkMetadata }[] = [];
 
     return new Writable({
         objectMode: true,
-        async write(chunk: Buffer, encoding, callback) {
-            try {
-                chunkSequence++;
-                const currentChunkIndex = chunkSequence;
+        write(chunk: Buffer, _encoding, callback) {
+            chunkSequence++;
+            const currentIndex = chunkSequence;
 
-                const { encrypted, keyId } = encryptionService.encryptWithActiveKey(chunk);
-                encryptionKeyIdRef.value = keyId;
-
-                const metadata = await chunkManager.uploadChunk(
-                    encrypted,
-                    currentChunkIndex,
-                    TaskPriority.HIGH,
-                    'chunk',
-                );
-
-                chunksMetadata.push(metadata);
-                callback();
-            } catch (err) {
-                logger.error('Chunk upload failed', toError(err), {
-                    chunkIndex: chunkSequence,
-                    fileName: originalName,
+            const upload = chunkManager
+                .uploadChunk(chunk, currentIndex, TaskPriority.HIGH, 'chunk')
+                .then((metadata) => {
+                    orderedResults.push({ index: currentIndex, metadata });
+                })
+                .catch((err) => {
+                    logger.error('Chunk upload failed', toError(err), {
+                        chunkIndex: currentIndex,
+                        fileName: originalName,
+                    });
+                    throw toError(err);
                 });
-                callback(toError(err));
-            }
+
+            pendingUploads.push(upload);
+            callback();
+        },
+        final(callback) {
+            Promise.all(pendingUploads)
+                .then(() => {
+                    orderedResults
+                        .sort((a, b) => a.index - b.index)
+                        .forEach(({ metadata }) => chunksMetadata.push(metadata));
+                    callback();
+                })
+                .catch(callback);
         },
     });
 };
@@ -233,7 +239,8 @@ const getFileMetadata = async (
 };
 
 /**
- * Downloads and decrypts all chunks from Discord
+ * Downloads and decrypts all chunks from Discord using a sliding window
+ * to bound memory usage: at most downloadConcurrency chunks in RAM at once.
  * @param client - Discord client
  * @param registry - Chunk registry containing chunk metadata
  * @param output - Writable stream to write decrypted data into
@@ -244,27 +251,38 @@ const downloadAndDecryptChunks = async (
     output: NodeJS.WritableStream,
 ): Promise<void> => {
     const chunkManager = new DiscordChunkManager(client);
-    let downloadedChunks = 0;
+    const chunks = registry.chunks;
+    const windowSize = queueConfig.downloadConcurrency;
+    const results: Buffer[] = new Array(chunks.length);
 
-    for (const chunk of registry.chunks) {
-        downloadedChunks++;
+    for (let start = 0; start < chunks.length; start += windowSize) {
+        const batch = chunks.slice(start, start + windowSize);
 
-        const decrypted = await chunkManager.downloadChunk(
-            chunk,
-            registry.encryptionKeyId,
-            TaskPriority.HIGH,
-            downloadedChunks,
+        const downloaded = await Promise.all(
+            batch.map((chunk, i) =>
+                chunkManager.downloadChunk(
+                    chunk,
+                    registry.encryptionKeyId,
+                    TaskPriority.HIGH,
+                    start + i + 1,
+                ),
+            ),
         );
 
+        for (let i = 0; i < downloaded.length; i++) {
+            results[start + i] = downloaded[i];
+        }
+    }
+
+    for (const [index, decrypted] of results.entries()) {
         logger.debug('Chunk recovered', {
-            chunkIndex: downloadedChunks,
-            totalChunks: registry.chunks.length,
+            chunkIndex: index + 1,
+            totalChunks: chunks.length,
             chunkSize: `${(decrypted.length / 1024 / 1024).toFixed(2)} MB`,
-            progress: `${((downloadedChunks / registry.chunks.length) * 100).toFixed(1)}%`,
+            progress: `${(((index + 1) / chunks.length) * 100).toFixed(1)}%`,
         });
 
         const canContinue = (output as any).write(decrypted);
-
         if (!canContinue) {
             await new Promise((resolve) => (output as any).once('drain', resolve));
         }
@@ -320,8 +338,8 @@ export const processUpload = async (
     }
 
     const chunksMetadata: ChunkMetadata[] = [];
-    const encryptionKeyIdRef: { value?: string } = {};
 
+    const encryptionKeyId = encryptionService.getActiveKeyId();
     const compressionLevel = getCompressionLevel(originalName);
     const compressed = compressionLevel > 0;
 
@@ -337,7 +355,6 @@ export const processUpload = async (
         client,
         originalName,
         chunksMetadata,
-        encryptionKeyIdRef,
     );
 
     try {
@@ -351,7 +368,7 @@ export const processUpload = async (
         const fileId = await saveFileMetadata(
             fileHash,
             chunksMetadata,
-            encryptionKeyIdRef.value,
+            encryptionKeyId,
             originalName,
             stats.size,
             compressed,
@@ -399,7 +416,10 @@ export const downloadFile = async (
 
     reencryptionScheduler.scheduleIfNeeded(client, registry, fileId);
 
-    res.setHeader('Content-Disposition', `attachment; filename="${file.name}"`);
+    res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${file.name.replace(/["\\\r\n]/g, '_')}"`,
+    );
     res.setHeader('Content-Type', 'application/octet-stream');
 
     const verificationStream = hasher.createVerificationStream(file.hash, file.name);

@@ -1,5 +1,5 @@
 param (
-    [Parameter(Mandatory=$false)]
+    [Parameter(Mandatory=$false, Position=0)]
     [ValidateSet("upload", "list", "status", "help", "download", "delete", "login", "logout")]
     [string]$Action = "help",
 
@@ -7,13 +7,16 @@ param (
     [string]$Path,
 
     [Parameter(Mandatory=$false)]
-    [string]$Id
+    [string]$Id,
+
+    [Parameter(Mandatory=$false)]
+    [string]$OutFile
 )
 
-$ApiUrl     = "http://localhost:3000"
-$SessionDir = "$env:USERPROFILE\.discord-s3"
+$ApiUrl      = "http://localhost:3000"
+$SessionDir  = "$env:USERPROFILE\.discord-s3"
 $SessionFile = "$SessionDir\session.json"
-$ResumeDir = "$SessionDir\resume"
+$ResumeDir   = "$SessionDir\resume"
 
 # --- Session helpers ---
 
@@ -36,11 +39,11 @@ function Clear-Session {
 function Save-UploadState($filePath, $fileHash) {
     if (-not (Test-Path $ResumeDir)) { New-Item -ItemType Directory -Path $ResumeDir | Out-Null }
     $resumeFile = "$ResumeDir\$fileHash.json"
-    @{ 
-        filePath = $filePath
-        fileHash = $fileHash
+    @{
+        filePath  = $filePath
+        fileHash  = $fileHash
         timestamp = (Get-Date).ToString("o")
-        attempts = 1
+        attempts  = 1
     } | ConvertTo-Json | Set-Content $resumeFile
 }
 
@@ -51,11 +54,11 @@ function Get-UploadState($fileHash) {
 }
 
 function Update-UploadAttempts($fileHash) {
+    $resumeFile = "$ResumeDir\$fileHash.json"
     $state = Get-UploadState $fileHash
     if ($state) {
         $state.attempts++
         $state.timestamp = (Get-Date).ToString("o")
-        $resumeFile = "$ResumeDir\$fileHash.json"
         $state | ConvertTo-Json | Set-Content $resumeFile
     }
 }
@@ -66,8 +69,7 @@ function Clear-UploadState($fileHash) {
 }
 
 function Get-FileHashQuick($filePath) {
-    $hash = Get-FileHash -Path $filePath -Algorithm SHA256
-    return $hash.Hash.ToLower()
+    return (Get-FileHash -Path $filePath -Algorithm SHA256).Hash.ToLower()
 }
 
 # --- Token refresh ---
@@ -75,9 +77,8 @@ function Get-FileHashQuick($filePath) {
 function Invoke-Refresh {
     $session = Load-Session
     if (-not $session) { return $null }
-
     try {
-        $body = @{ refreshToken = $session.refreshToken } | ConvertTo-Json
+        $body   = @{ refreshToken = $session.refreshToken } | ConvertTo-Json
         $result = Invoke-RestMethod -Uri "$ApiUrl/auth/refresh" -Method Post -Body $body -ContentType "application/json"
         Save-Session $result.accessToken $result.refreshToken
         return $result.accessToken
@@ -101,96 +102,72 @@ function Invoke-Auth {
 
     $session = Load-Session
     if (-not $session) {
-        Write-Host "[!] Non authentifié. Lance : .\cli.ps1 -Action login" -ForegroundColor Red
+        Write-Host "[!] Non authentifie. Lance : .\cli.ps1 login" -ForegroundColor Red
         return $null
     }
 
-    $headers = @{ Authorization = "Bearer $($session.accessToken)" }
-
-    $params = @{ Uri = $Uri; Method = $Method; Headers = $headers }
-    if ($Body)    { $params.Body = $Body; $params.ContentType = "application/json; charset=utf-8" }
+    $headers     = @{ Authorization = "Bearer $($session.accessToken)" }
+    $contentType = "application/json; charset=utf-8"
+    $params      = @{ Uri = $Uri; Method = $Method; Headers = $headers; ErrorAction = "Stop" }
+    if ($Body)    { $params.Body = $Body; $params.ContentType = $contentType }
     if ($OutFile) { $params.OutFile = $OutFile }
 
-    try {
-        if ($ShowProgress) {
-            $job = Start-Job -ScriptBlock {
-                param($Uri, $Method, $Headers, $Body, $OutFile, $ContentType)
-                try {
-                    $params = @{ Uri = $Uri; Method = $Method; Headers = $Headers; ErrorAction = 'Stop' }
-                    if ($Body) { $params.Body = $Body; $params.ContentType = $ContentType }
-                    if ($OutFile) { 
-                        $params.OutFile = $OutFile
-                        Invoke-WebRequest @params | Out-Null
-                        return @{ success = $true; result = $true }
-                    }
-                    $result = Invoke-RestMethod @params
-                    return @{ success = $true; result = $result }
-                } catch {
-                    return @{ success = $false; error = $_.Exception.Message; status = $_.Exception.Response.StatusCode.value__ }
-                }
-            } -ArgumentList $Uri, $Method, $headers, $Body, $OutFile, $params.ContentType
+    function Exec-Request($p) {
+        if ($p.OutFile) { Invoke-WebRequest @p | Out-Null; return $true }
+        return Invoke-RestMethod @p
+    }
 
-            $startTime = Get-Date
-            $lastPercent = 0
-            while ($job.State -eq 'Running') {
-                $elapsed = ((Get-Date) - $startTime).TotalSeconds
-                # Logarithmic progress: fast start, slows down
-                $percent = [Math]::Min(95, [Math]::Floor(30 * [Math]::Log($elapsed + 1)))
-                if ($percent -gt $lastPercent) {
-                    Write-Progress -Activity $ProgressActivity -Status "En cours... ($([Math]::Floor($elapsed))s)" -PercentComplete $percent
-                    $lastPercent = $percent
-                }
-                Start-Sleep -Milliseconds 300
-            }
-            
-            Write-Progress -Activity $ProgressActivity -Status "Finalisation..." -PercentComplete 100
-            $jobResult = Receive-Job -Job $job
-            Remove-Job -Job $job
-            Write-Progress -Activity $ProgressActivity -Completed
-
-            if (-not $jobResult.success) {
-                if ($jobResult.status -eq 401) {
-                    $newToken = Invoke-Refresh
-                    if (-not $newToken) {
-                        Write-Host "[!] Session expirée. Lance : .\cli.ps1 -Action login" -ForegroundColor Red
-                        return $null
-                    }
-                    # Retry with new token
-                    $headers = @{ Authorization = "Bearer $newToken" }
-                    if ($OutFile) { 
-                        Invoke-WebRequest -Uri $Uri -Method $Method -Headers $headers -Body $Body -ContentType $params.ContentType -OutFile $OutFile -ErrorAction Stop | Out-Null
-                        return $true
-                    }
-                    return Invoke-RestMethod -Uri $Uri -Method $Method -Headers $headers -Body $Body -ContentType $params.ContentType -ErrorAction Stop
-                }
-                Write-Host "[X] Erreur : $($jobResult.error)" -ForegroundColor Red
-                return $null
-            }
-            return $jobResult.result
+    function Retry-WithNewToken {
+        $newToken = Invoke-Refresh
+        if (-not $newToken) {
+            Write-Host "[!] Session expiree. Lance : .\cli.ps1 login" -ForegroundColor Red
+            return $null
         }
+        $params.Headers = @{ Authorization = "Bearer $newToken" }
+        try   { return Exec-Request $params }
+        catch { Write-Host "[X] Erreur : $($_.Exception.Message)" -ForegroundColor Red; return $null }
+    }
 
-        if ($OutFile) {
-            Invoke-WebRequest @params | Out-Null
-            return $true
-        }
-        return Invoke-RestMethod @params
-    } catch {
-        $status = $_.Exception.Response.StatusCode.value__
-        if ($status -eq 401) {
-            $newToken = Invoke-Refresh
-            if (-not $newToken) {
-                Write-Host "[!] Session expirée. Lance : .\cli.ps1 -Action login" -ForegroundColor Red
-                return $null
-            }
-            $params.Headers = @{ Authorization = "Bearer $newToken" }
+    if ($ShowProgress) {
+        $job = Start-Job -ScriptBlock {
+            param($Uri, $Method, $Headers, $Body, $OutFile, $ContentType)
             try {
-                if ($OutFile) { Invoke-WebRequest @params | Out-Null; return $true }
-                return Invoke-RestMethod @params
+                $p = @{ Uri = $Uri; Method = $Method; Headers = $Headers; ErrorAction = "Stop" }
+                if ($Body)    { $p.Body = $Body; $p.ContentType = $ContentType }
+                if ($OutFile) { $p.OutFile = $OutFile; Invoke-WebRequest @p | Out-Null; return @{ success = $true; result = $true } }
+                return @{ success = $true; result = (Invoke-RestMethod @p) }
             } catch {
-                Write-Host "[X] Erreur : $($_.Exception.Message)" -ForegroundColor Red
-                return $null
+                return @{ success = $false; error = $_.Exception.Message; status = $_.Exception.Response.StatusCode.value__ }
             }
+        } -ArgumentList $Uri, $Method, $headers, $Body, $OutFile, $contentType
+
+        $startTime   = Get-Date
+        $lastPercent = 0
+        while ($job.State -eq "Running") {
+            $elapsed = ((Get-Date) - $startTime).TotalSeconds
+            $percent = [Math]::Min(95, [Math]::Floor(30 * [Math]::Log($elapsed + 1)))
+            if ($percent -gt $lastPercent) {
+                Write-Progress -Activity $ProgressActivity -Status "En cours... ($([Math]::Floor($elapsed))s)" -PercentComplete $percent
+                $lastPercent = $percent
+            }
+            Start-Sleep -Milliseconds 300
         }
+        Write-Progress -Activity $ProgressActivity -Status "Finalisation..." -PercentComplete 100
+        $jobResult = Receive-Job -Job $job
+        Remove-Job  -Job $job
+        Write-Progress -Activity $ProgressActivity -Completed
+
+        if (-not $jobResult.success) {
+            if ($jobResult.status -eq 401) { return Retry-WithNewToken }
+            Write-Host "[X] Erreur : $($jobResult.error)" -ForegroundColor Red
+            return $null
+        }
+        return $jobResult.result
+    }
+
+    try   { return Exec-Request $params }
+    catch {
+        if ($_.Exception.Response.StatusCode.value__ -eq 401) { return Retry-WithNewToken }
         Write-Host "[X] Erreur : $($_.Exception.Message)" -ForegroundColor Red
         return $null
     }
@@ -201,29 +178,27 @@ function Invoke-Auth {
 switch ($Action) {
     "help" {
         Write-Host "`n--- DISCORD STORAGE CLI ---" -ForegroundColor Cyan
-        Write-Host "Usage: .\cli.ps1 -Action <commande> [-Path <chemin>] [-Id <id>]"
-        Write-Host "  login    : Authentification (requis avant toute opération)"
-        Write-Host "  logout   : Supprime la session locale"
-        Write-Host "  upload   : Envoie un fichier (ex: -Path 'C:\test.zip')"
-        Write-Host "             Reprend automatiquement en cas d'échec"
-        Write-Host "  list     : Liste les fichiers sur le cloud"
-        Write-Host "  download : Télécharge un fichier (ex: -Id a7f2b)"
-        Write-Host "  delete   : Supprime un fichier partout (ex: -Id a7f2b)"
-        Write-Host "  status   : Vérifie si le bot est en ligne"
+        Write-Host "Usage: .\cli.ps1 <commande> [options]"
+        Write-Host "  login                                  : Authentification"
+        Write-Host "  logout                                 : Supprime la session locale"
+        Write-Host "  status                                 : Verifie si le serveur est en ligne"
+        Write-Host "  upload   -Path <chemin>                : Envoie un fichier"
+        Write-Host "  list                                   : Liste les fichiers"
+        Write-Host "  download -Id <id> [-OutFile <chemin>]  : Telecharge un fichier"
+        Write-Host "  delete   -Id <id>                      : Supprime un fichier"
     }
 
     "login" {
-        $username = Read-Host "Username"
-        $password = Read-Host "Password" -AsSecureString
+        $username      = Read-Host "Username"
+        $password      = Read-Host "Password" -AsSecureString
         $plainPassword = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
             [Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)
         )
-
         try {
-            $body = @{ username = $username; password = $plainPassword } | ConvertTo-Json
+            $body   = @{ username = $username; password = $plainPassword } | ConvertTo-Json
             $result = Invoke-RestMethod -Uri "$ApiUrl/auth/login" -Method Post -Body $body -ContentType "application/json"
             Save-Session $result.accessToken $result.refreshToken
-            Write-Host "[OK] Connecté en tant que $username" -ForegroundColor Green
+            Write-Host "[OK] Connecte en tant que $username" -ForegroundColor Green
         } catch {
             Write-Host "[X] Identifiants invalides." -ForegroundColor Red
         }
@@ -238,66 +213,64 @@ switch ($Action) {
             } catch {}
         }
         Clear-Session
-        Write-Host "[OK] Session supprimée." -ForegroundColor Green
+        Write-Host "[OK] Session supprimee." -ForegroundColor Green
     }
 
     "status" {
         try {
-            $result = Invoke-RestMethod -Uri "$ApiUrl/status" -Method Get
+            $result = Invoke-RestMethod -Uri "$ApiUrl/status" -Method Get -ErrorAction Stop
             Write-Host "[OK] Serveur actif (Bot: $($result.bot))" -ForegroundColor Green
         } catch {
-            Write-Host "[X] Serveur hors-ligne." -ForegroundColor Red
+            Write-Host "[X] Serveur hors-ligne : $($_.Exception.Message)" -ForegroundColor Red
         }
     }
 
     "upload" {
-        if (-not $Path) { Write-Host "[!] Path requis." -ForegroundColor Red; return }
-        if (-not (Test-Path $Path)) { Write-Host "[!] Fichier introuvable." -ForegroundColor Red; return }
+        if (-not $Path)              { Write-Host "[!] -Path requis." -ForegroundColor Red; return }
+        if (-not (Test-Path $Path))  { Write-Host "[!] Fichier introuvable." -ForegroundColor Red; return }
 
         $FullPath = (Resolve-Path -Path $Path).Path
-        $FileSize = (Get-Item $FullPath).Length
         $FileName = Split-Path $FullPath -Leaf
-        
-        Write-Host "[>] Calcul du hash du fichier..." -ForegroundColor Cyan
-        $FileHash = Get-FileHashQuick $FullPath
-        
-        # Check for previous failed upload
+
+        Write-Host "[>] Calcul du hash..." -ForegroundColor Cyan
+        $FileHash    = Get-FileHashQuick $FullPath
         $resumeState = Get-UploadState $FileHash
+
         if ($resumeState) {
-            Write-Host "[!] Upload précédent détecté (tentative #$($resumeState.attempts))" -ForegroundColor Yellow
-            $retry = Read-Host "Voulez-vous réessayer ? (O/N)"
+            Write-Host "[!] Upload precedent detecte (tentative #$($resumeState.attempts))" -ForegroundColor Yellow
+            $retry = Read-Host "Reessayer ? (O/N)"
             if ($retry -ne "O" -and $retry -ne "o") {
                 Clear-UploadState $FileHash
-                Write-Host "[!] Upload annulé." -ForegroundColor Yellow
+                Write-Host "[!] Upload annule." -ForegroundColor Yellow
                 return
             }
             Update-UploadAttempts $FileHash
         } else {
             Save-UploadState $FullPath $FileHash
         }
-        
-        Write-Host "[>] Upload de : $FileName ($([math]::Round($FileSize/1MB, 2)) MB)" -ForegroundColor Cyan
 
-        $body = @{ filePath = $FullPath } | ConvertTo-Json
+        $FileSize = (Get-Item $FullPath).Length
+        Write-Host "[>] Upload : $FileName ($([math]::Round($FileSize/1MB, 2)) MB)" -ForegroundColor Cyan
+
+        $body   = @{ filePath = $FullPath } | ConvertTo-Json
         $result = Invoke-Auth -Uri "$ApiUrl/upload" -Method Post -Body $body -ShowProgress -ProgressActivity "Upload: $FileName"
-        
+
         if ($result) {
             Clear-UploadState $FileHash
-            Write-Host "[OK] Succès ! ID : $($result.id)" -ForegroundColor Green
-            Write-Host "[#] Lien : $($result.url)" -ForegroundColor Yellow
+            Write-Host "[OK] Succes ! ID : $($result.id)" -ForegroundColor Green
+            if ($result.url) { Write-Host "[#] Lien : $($result.url)" -ForegroundColor Yellow }
         } else {
-            Write-Host "[X] Échec de l'upload. L'état a été sauvegardé pour reprise." -ForegroundColor Red
-            Write-Host "[i] Relancez la commande pour réessayer." -ForegroundColor Yellow
+            Write-Host "[X] Echec. Etat sauvegarde pour reprise." -ForegroundColor Red
         }
     }
 
     "list" {
-        Write-Progress -Activity "Récupération de la liste" -Status "Connexion au serveur..." -PercentComplete 0
+        Write-Progress -Activity "Liste des fichiers" -Status "Connexion..." -PercentComplete 0
         $files = Invoke-Auth -Uri "$ApiUrl/list"
-        Write-Progress -Activity "Récupération de la liste" -Completed
-        
-        if ($null -eq $files -or $files.Count -eq 0) {
-            Write-Host "[!] Le registre est vide." -ForegroundColor Yellow
+        Write-Progress -Activity "Liste des fichiers" -Completed
+
+        if (-not $files -or @($files).Count -eq 0) {
+            Write-Host "[!] Aucun fichier." -ForegroundColor Yellow
             return
         }
 
@@ -315,21 +288,44 @@ switch ($Action) {
     "download" {
         if (-not $Id) { Write-Host "[!] -Id requis." -ForegroundColor Red; return }
 
-        $OutFile = if ($Path) { $Path } else { "downloaded_$Id" }
-        Write-Host "[>] Récupération du fichier ID: $Id..." -ForegroundColor Cyan
-        
-        $result = Invoke-Auth -Uri "$ApiUrl/download/$Id" -OutFile $OutFile -ShowProgress -ProgressActivity "Download: $Id"
-        
-        if ($result) {
-            $FileSize = (Get-Item $OutFile).Length
-            Write-Host "[OK] Fichier téléchargé : $OutFile ($([math]::Round($FileSize/1MB, 2)) MB)" -ForegroundColor Green
+        $session = Load-Session
+        if (-not $session) { Write-Host "[!] Non authentifie. Lance : .\cli.ps1 login" -ForegroundColor Red; return }
+
+        $dest    = if ($OutFile) { $OutFile } elseif ($Path) { $Path } else { "downloaded_$Id" }
+        $AbsDest = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($dest)
+        $headers = @{ Authorization = "Bearer $($session.accessToken)" }
+
+        Write-Host "[>] Telechargement ID: $Id..." -ForegroundColor Cyan
+        $startTime          = Get-Date
+        $ProgressPreference = "SilentlyContinue"
+        try {
+            Invoke-WebRequest -Uri "$ApiUrl/download/$Id" -Headers $headers -OutFile $AbsDest -ErrorAction Stop | Out-Null
+            $ProgressPreference = "Continue"
+            $elapsed  = [math]::Round(((Get-Date) - $startTime).TotalSeconds, 1)
+            $FileSize = (Get-Item $AbsDest).Length
+            $speed    = if ($elapsed -gt 0) { [math]::Round(($FileSize / 1MB) / $elapsed, 2) } else { "?" }
+            Write-Host "[OK] $AbsDest - $([math]::Round($FileSize/1MB, 2)) MB en ${elapsed}s ($speed MB/s)" -ForegroundColor Green
+        } catch {
+            $status = $_.Exception.Response.StatusCode.value__
+            if ($status -eq 401) {
+                $newToken = Invoke-Refresh
+                if (-not $newToken) { Write-Host "[!] Session expiree." -ForegroundColor Red; return }
+                $headers = @{ Authorization = "Bearer $newToken" }
+                Invoke-WebRequest -Uri "$ApiUrl/download/$Id" -Headers $headers -OutFile $AbsDest -ErrorAction Stop | Out-Null
+                $FileSize = (Get-Item $AbsDest).Length
+                Write-Host "[OK] $AbsDest ($([math]::Round($FileSize/1MB, 2)) MB)" -ForegroundColor Green
+            } else {
+                Write-Host "[X] Erreur : $($_.Exception.Message)" -ForegroundColor Red
+            }
         }
     }
 
     "delete" {
         if (-not $Id) { Write-Host "[!] -Id requis." -ForegroundColor Red; return }
 
-        Write-Host "[!] Suppression du fichier ID: $Id..." -ForegroundColor Yellow
+        $confirm = Read-Host "[!] Supprimer le fichier $Id ? (O/N)"
+        if ($confirm -ne "O" -and $confirm -ne "o") { Write-Host "[!] Annule." -ForegroundColor Yellow; return }
+
         $result = Invoke-Auth -Uri "$ApiUrl/file/$Id" -Method Delete
         if ($result -and $result.success) {
             Write-Host "[OK] $($result.message)" -ForegroundColor Green

@@ -32,4 +32,5 @@ export const ENCRYPTION = {
 
 export const QUEUE = {
     RATE_LIMIT_DELAY: 200,
+    UPLOAD_CONCURRENCY: 3,
 } as const;

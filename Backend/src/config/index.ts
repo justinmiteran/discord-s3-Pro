@@ -92,6 +92,19 @@ logger.debug('Database configuration loaded', {
 });
 
 /**
+ * Queue configuration
+ */
+export const queue = {
+    uploadConcurrency: parseInt(userConfig.Queue?.upload_concurrency || '3'),
+    downloadConcurrency: parseInt(userConfig.Queue?.download_concurrency || '3'),
+};
+
+logger.debug('Queue configuration loaded', {
+    uploadConcurrency: queue.uploadConcurrency,
+    downloadConcurrency: queue.downloadConcurrency,
+});
+
+/**
  * Security configuration
  */
 export const security = {

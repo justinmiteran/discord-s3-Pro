@@ -31,7 +31,7 @@
 - [ ] Desktop notifications on upload completion
 - [ ] Cross-platform CLI rewrite in Node.js (Linux/macOS support)
 - [ ] File sharing with expiring temporary links
-- [ ] Parallelize chunk uploads (currently sequential)
+- [x] Parallelize chunk uploads (currently sequential)
 - [x] Adaptive compression level by file type
 - [ ] In-memory metadata cache for frequently accessed files
 - [ ] Optimized streaming with smarter buffers

@@ -1,4 +1,4 @@
-import { Client, TextChannel, AttachmentBuilder, Message } from 'discord.js';
+import { Client, TextChannel, AttachmentBuilder } from 'discord.js';
 import axios from 'axios';
 import { encryptionService } from '../crypto/index.js';
 import queue, { TaskPriority } from '../queueManager.js';
@@ -20,8 +20,8 @@ export class DiscordChunkManager {
     }
 
     /**
-     * Uploads an encrypted chunk to Discord
-     * @param buffer - Decrypted buffer to encrypt and upload
+     * Uploads a plaintext chunk to Discord (encryption handled internally)
+     * @param buffer - Plaintext buffer to encrypt and upload
      * @param chunkIndex - Index of the chunk for logging
      * @param priority - Queue priority (HIGH for user ops, LOW for background)
      * @param namePrefix - Prefix for the attachment filename

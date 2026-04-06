@@ -1,6 +1,7 @@
 import logger, { startTimer } from '../utils/logger.js';
 import { toError } from '../utils/errors/AppError.js';
 import { QUEUE } from '../constants/index.js';
+import { queue as queueConfig } from '../config/index.js';
 
 export enum TaskPriority {
     HIGH = 0,      // User-facing operations (upload, download)
@@ -17,14 +18,19 @@ interface QueueTask<T = any> {
 }
 
 /**
- * Manages sequential task execution with rate limiting
- * Ensures Discord API calls are properly queued and rate limits are respected
+ * Manages concurrent task execution with rate limiting
+ * Supports configurable concurrency for parallel Discord API calls
  */
 class QueueManager {
     private queue: QueueTask[] = [];
-    private processing: boolean = false;
+    private activeWorkers: number = 0;
+    private readonly concurrency: number;
     private totalTasksHandled: number = 0;
     private rateLimitHits: number = 0;
+
+    constructor(concurrency: number = QUEUE.UPLOAD_CONCURRENCY) {
+        this.concurrency = concurrency;
+    }
 
     /**
      * Adds a new task to the execution queue
@@ -71,18 +77,22 @@ class QueueManager {
     }
 
     /**
-     * Processes the next task in the queue with rate limit handling
+     * Spawns a worker to process the next task in the queue
      */
-    private async process(): Promise<void> {
-        if (this.processing || this.queue.length === 0) return;
-        this.processing = true;
+    private process(): void {
+        if (this.activeWorkers >= this.concurrency || this.queue.length === 0) return;
 
         const item = this.queue.shift();
-        if (!item) {
-            this.processing = false;
-            return;
-        }
+        if (!item) return;
 
+        this.activeWorkers++;
+        this.runTask(item);
+    }
+
+    /**
+     * Executes a single task with rate limit handling
+     */
+    private async runTask(item: QueueTask): Promise<void> {
         const { task, resolve, reject } = item;
         const elapsed = startTimer();
 
@@ -129,9 +139,9 @@ class QueueManager {
             });
             reject(toError(error));
         } finally {
-            this.processing = false;
+            this.activeWorkers--;
 
-            if (this.queue.length === 0 && this.totalTasksHandled > 0) {
+            if (this.queue.length === 0 && this.activeWorkers === 0 && this.totalTasksHandled > 0) {
                 logger.debug('Queue emptied', {
                     totalHandled: this.totalTasksHandled,
                     rateLimitHits: this.rateLimitHits,
@@ -157,9 +167,11 @@ class QueueManager {
             queueSize: this.queue.length,
             totalHandled: this.totalTasksHandled,
             rateLimitHits: this.rateLimitHits,
-            isProcessing: this.processing,
+            isProcessing: this.activeWorkers > 0,
+            activeWorkers: this.activeWorkers,
+            concurrency: this.concurrency,
         };
     }
 }
 
-export default new QueueManager();
+export default new QueueManager(queueConfig.uploadConcurrency);

@@ -14,6 +14,7 @@ vi.mock('../../../core/crypto/index.js', () => ({
             const data = fullBuffer.subarray(32);
             return { decrypted: data, keyId: 'test-key' };
         }),
+        getActiveKeyId: vi.fn(() => 'test-key'),
     },
 }));
 
@@ -24,6 +25,7 @@ vi.mock('../../../config/index.js', () => ({
     discord: { token: 'test', channels: ['ch1', 'ch2'] },
     auth: { mongoUri: 'mongodb://localhost:27017/test' },
     channels: ['ch1', 'ch2'],
+    queue: { uploadConcurrency: 3, downloadConcurrency: 3 },
 }));
 
 vi.mock('../../../utils/logger.js');

@@ -306,5 +306,43 @@ describe('LazyReencryptionService', () => {
             expect(registryId).toBe('reg1');
             // encryptionKeyId is NOT updated in memory, only in DB via updateChunkRegistryData
         });
+        it('should skip re-encryption if already in progress for same registry', async () => {
+            const registry: ChunkRegistry = {
+                id: 'reg-concurrent',
+                hash: 'abc123',
+                chunks: [{ mId: 'msg1', cId: 'ch1' }],
+                refCount: 1,
+                compressed: true,
+                encryptionKeyId: 'v1',
+                createdAt: '2024-01-01T00:00:00.000Z',
+            };
+
+            // Launch two concurrent re-encryptions on the same registry
+            const [id1, id2] = await Promise.all([
+                service.reencryptRegistry(mockClient, registry, 'context-1'),
+                service.reencryptRegistry(mockClient, registry, 'context-2'),
+            ]);
+
+            expect(id1).toBe('reg-concurrent');
+            expect(id2).toBe('reg-concurrent');
+        });
+
+        it('should allow re-encryption again after completion', async () => {
+            const registry: ChunkRegistry = {
+                id: 'reg-sequential',
+                hash: 'abc123',
+                chunks: [{ mId: 'msg1', cId: 'ch1' }],
+                refCount: 1,
+                compressed: true,
+                encryptionKeyId: 'v1',
+                createdAt: '2024-01-01T00:00:00.000Z',
+            };
+
+            await service.reencryptRegistry(mockClient, registry, 'first');
+            // Should not throw — guard released after first completion
+            await expect(
+                service.reencryptRegistry(mockClient, registry, 'second'),
+            ).resolves.toBe('reg-sequential');
+        });
     });
 });

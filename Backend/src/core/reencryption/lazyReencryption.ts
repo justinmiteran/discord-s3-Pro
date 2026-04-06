@@ -13,6 +13,7 @@ import { DiscordChunkManager } from '../discord/discordChunkManager.js';
  */
 export class LazyReencryptionService {
     private chunkManager: DiscordChunkManager | null = null;
+    private reencryptingIds: Set<string> = new Set();
 
     /**
      * Initializes the chunk manager with Discord client
@@ -47,10 +48,19 @@ export class LazyReencryptionService {
         registry: ChunkRegistry,
         context: string,
     ): Promise<string> {
+        if (this.reencryptingIds.has(registry.id)) {
+            logger.debug('Re-encryption already in progress, skipping', {
+                registryId: registry.id,
+                context,
+            });
+            return registry.id;
+        }
+
         if (!this.chunkManager) {
             this.initialize(client);
         }
 
+        this.reencryptingIds.add(registry.id);
         const elapsed = startTimer();
         const activeKeyId = encryptionService.getActiveKeyId();
 
@@ -131,6 +141,8 @@ export class LazyReencryptionService {
                 duration,
             });
             throw err;
+        } finally {
+            this.reencryptingIds.delete(registry.id);
         }
     }
 }

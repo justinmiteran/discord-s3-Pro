@@ -32,7 +32,7 @@
 - [ ] Cross-platform CLI rewrite in Node.js (Linux/macOS support)
 - [ ] File sharing with expiring temporary links
 - [ ] Parallelize chunk uploads (currently sequential)
-- [ ] Adaptive compression level by file type
+- [x] Adaptive compression level by file type
 - [ ] In-memory metadata cache for frequently accessed files
 - [ ] Optimized streaming with smarter buffers
 - [ ] CI/CD pipeline (GitHub Actions — auto tests + deploy)

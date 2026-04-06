@@ -152,6 +152,22 @@ describe('storageEngine', () => {
                 }),
             );
         });
+        it('uploads incompressible file without compression', async () => {
+            const testData = Buffer.from('fake-jpeg-data');
+
+            vi.mocked(fs.statSync).mockReturnValue({ size: testData.length } as any);
+            vi.mocked(fs.createReadStream).mockReturnValue(Readable.from([testData]) as any);
+            mockRepository.getChunkRegistryByHash = vi.fn().mockResolvedValue(null);
+
+            const fileId = await processUpload(mockClient as Client, '/photo.jpg', 'photo.jpg');
+
+            expect(fileId).toBeDefined();
+            expect(mockRepository.saveChunkRegistry).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    compressed: false,
+                }),
+            );
+        });
     });
 
     describe('downloadFile', () => {

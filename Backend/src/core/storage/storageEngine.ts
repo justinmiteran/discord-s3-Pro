@@ -11,6 +11,7 @@ import * as hasher from '../../utils/hasher.js';
 import { getRepository } from '../database.js';
 import { FileData, ChunkMetadata, ChunkRegistry } from '../../types/models/file.model.js';
 import logger, { startTimer } from '../../utils/logger.js';
+import { getCompressionLevel } from '../../utils/compressionPolicy.js';
 import { pipeline, Writable } from 'stream';
 import { promisify } from 'util';
 import { NotFoundError, FileTooLargeError, toError } from '../../utils/errors/AppError.js';
@@ -163,6 +164,7 @@ const saveFileMetadata = async (
     encryptionKeyId: string | undefined,
     originalName: string,
     fileSize: number,
+    compressed: boolean,
 ): Promise<string> => {
     const repo = getRepository();
 
@@ -172,7 +174,7 @@ const saveFileMetadata = async (
         hash: fileHash,
         chunks: chunksMetadata,
         refCount: 1,
-        compressed: true,
+        compressed,
         encryptionKeyId,
         createdAt: new Date().toISOString(),
     };
@@ -234,12 +236,12 @@ const getFileMetadata = async (
  * Downloads and decrypts all chunks from Discord
  * @param client - Discord client
  * @param registry - Chunk registry containing chunk metadata
- * @param gunzip - Decompression stream to write decrypted data
+ * @param output - Writable stream to write decrypted data into
  */
 const downloadAndDecryptChunks = async (
     client: Client,
     registry: ChunkRegistry,
-    gunzip: zlib.Gunzip,
+    output: NodeJS.WritableStream,
 ): Promise<void> => {
     const chunkManager = new DiscordChunkManager(client);
     let downloadedChunks = 0;
@@ -261,14 +263,14 @@ const downloadAndDecryptChunks = async (
             progress: `${((downloadedChunks / registry.chunks.length) * 100).toFixed(1)}%`,
         });
 
-        const canContinue = gunzip.write(decrypted);
+        const canContinue = (output as any).write(decrypted);
 
         if (!canContinue) {
-            await new Promise((resolve) => gunzip.once('drain', resolve));
+            await new Promise((resolve) => (output as any).once('drain', resolve));
         }
     }
 
-    gunzip.end();
+    (output as any).end();
 };
 
 // ============================================================================
@@ -320,8 +322,16 @@ export const processUpload = async (
     const chunksMetadata: ChunkMetadata[] = [];
     const encryptionKeyIdRef: { value?: string } = {};
 
+    const compressionLevel = getCompressionLevel(originalName);
+    const compressed = compressionLevel > 0;
+
+    logger.debug('Compression policy applied', {
+        fileName: originalName,
+        compressionLevel,
+        compressed,
+    });
+
     const readStream = fs.createReadStream(filePath);
-    const compressor = zlib.createGzip();
     const splitter = new ChunkSplitter(server.chunkSize);
     const uploadDestination = createChunkUploadStream(
         client,
@@ -331,7 +341,12 @@ export const processUpload = async (
     );
 
     try {
-        await pipelinePromise(readStream, compressor, splitter, uploadDestination);
+        if (compressed) {
+            const compressor = zlib.createGzip({ level: compressionLevel });
+            await pipelinePromise(readStream, compressor, splitter, uploadDestination);
+        } else {
+            await pipelinePromise(readStream, splitter, uploadDestination);
+        }
 
         const fileId = await saveFileMetadata(
             fileHash,
@@ -339,6 +354,7 @@ export const processUpload = async (
             encryptionKeyIdRef.value,
             originalName,
             stats.size,
+            compressed,
         );
 
         const duration = elapsed();
@@ -386,17 +402,23 @@ export const downloadFile = async (
     res.setHeader('Content-Disposition', `attachment; filename="${file.name}"`);
     res.setHeader('Content-Type', 'application/octet-stream');
 
-    const gunzip = zlib.createGunzip();
+    const verificationStream = hasher.createVerificationStream(file.hash, file.name);
+    verificationStream.pipe(res);
 
-    gunzip.on('error', (err) => {
-        logger.error('Decompression failed', toError(err), { fileId, fileName: file.name });
-        if (!res.headersSent) res.status(500).send('Stream decompression error.');
-    });
-
-    gunzip.pipe(hasher.createVerificationStream(file.hash, file.name)).pipe(res);
+    const output = registry.compressed
+        ? (() => {
+              const gunzip = zlib.createGunzip();
+              gunzip.on('error', (err) => {
+                  logger.error('Decompression failed', toError(err), { fileId, fileName: file.name });
+                  if (!res.headersSent) res.status(500).send('Stream decompression error.');
+              });
+              gunzip.pipe(verificationStream);
+              return gunzip;
+          })()
+        : verificationStream;
 
     try {
-        await downloadAndDecryptChunks(client, registry, gunzip);
+        await downloadAndDecryptChunks(client, registry, output);
 
         const duration = elapsed();
         logger.success('File download completed', {
@@ -412,7 +434,7 @@ export const downloadFile = async (
             fileName: file.name,
             duration,
         });
-        gunzip.destroy();
+        if (output !== verificationStream) (output as zlib.Gunzip).destroy();
         if (!res.headersSent) {
             res.status(500).json({ error: 'Download failed during chunk recovery.' });
         }

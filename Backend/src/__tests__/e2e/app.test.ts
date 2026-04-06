@@ -47,17 +47,7 @@ vi.mock('../../config/index.js', () => ({
     channels: ['ch1', 'ch2'],
 }));
 
-vi.mock('../../utils/logger.js', () => ({
-    default: {
-        debug: vi.fn(),
-        info: vi.fn(),
-        success: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-        fatal: vi.fn(),
-        http: vi.fn(),
-    },
-}));
+vi.mock('../../utils/logger.js');
 
 vi.mock('../../core/database.js', () => ({
     getRepository: () => mockRepository,

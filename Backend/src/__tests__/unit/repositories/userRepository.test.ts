@@ -13,17 +13,7 @@ const mockDb = {
     collection: vi.fn(() => mockCollection),
 } as unknown as Db;
 
-vi.mock('../../../utils/logger.js', () => ({
-    default: {
-        debug: vi.fn(),
-        info: vi.fn(),
-        success: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-        fatal: vi.fn(),
-        http: vi.fn(),
-    },
-}));
+vi.mock('../../../utils/logger.js');
 
 import {
     initUserRepository,

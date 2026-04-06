@@ -35,18 +35,6 @@ export const mockConfig = {
     channels: ['ch1', 'ch2', 'ch3'],
 };
 
-export const mockLogger = {
-    default: {
-        debug: vi.fn(),
-        info: vi.fn(),
-        success: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-        fatal: vi.fn(),
-        http: vi.fn(),
-    },
-};
-
 /**
  * Variant with minimal config for tests that need different settings
  */

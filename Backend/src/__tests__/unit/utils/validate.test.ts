@@ -1,8 +1,8 @@
 import { vi } from 'vitest';
-import { mockConfig, mockLogger } from '../../helpers/standardMocks.js';
+import { mockConfig } from '../../helpers/standardMocks.js';
 
 vi.mock('../../../config/index.js', () => mockConfig);
-vi.mock('../../../utils/logger.js', () => mockLogger);
+vi.mock('../../../utils/logger.js');
 
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';

@@ -9,17 +9,7 @@ vi.mock('../../../config/index.js', () => ({
     auth: { mongoUri: 'mongodb://localhost:27017/test' },
 }));
 
-vi.mock('../../../utils/logger.js', () => ({
-    default: {
-        debug: vi.fn(),
-        info: vi.fn(),
-        success: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-        fatal: vi.fn(),
-        http: vi.fn(),
-    },
-}));
+vi.mock('../../../utils/logger.js');
 
 import { errorHandler, notFoundHandler } from '../../../api/middlewares/errorHandler.js';
 import { AppError, ValidationError } from '../../../utils/errors/AppError.js';

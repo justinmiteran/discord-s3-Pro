@@ -8,27 +8,19 @@ vi.mock('../../../config/index.js', () => ({
     auth: { mongoUri: 'mongodb://localhost:27017/test' },
 }));
 
-vi.mock('../../../utils/logger.js', () => ({
-    default: {
-        debug: vi.fn(),
-        info: vi.fn(),
-        success: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-        fatal: vi.fn(),
-        http: vi.fn(),
-    },
-}));
-
-import logger from '../../../utils/logger.js';
+vi.mock('../../../utils/logger.js');
 
 describe('queueManager', () => {
     let queueManager: any;
+    let logger: any;
 
     beforeEach(async () => {
         vi.clearAllMocks();
         vi.resetModules();
         vi.useFakeTimers();
+
+        const loggerModule = await import('../../../utils/logger.js');
+        logger = loggerModule.default;
 
         const module = await import('../../../core/queueManager.js');
         queueManager = module.default;

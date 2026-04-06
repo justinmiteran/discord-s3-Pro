@@ -46,15 +46,7 @@ vi.mock('../../../core/discord/channelPool.js', () => ({
     },
 }));
 
-vi.mock('../../../utils/logger.js', () => ({
-    default: {
-        info: vi.fn(),
-        debug: vi.fn(),
-        success: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-    },
-}));
+vi.mock('../../../utils/logger.js');
 
 vi.mock('../../../pipeline/encryptStream.js', () => ({
     encryptBuffer: vi.fn((data: Buffer) => ({
